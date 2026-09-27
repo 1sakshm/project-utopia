@@ -1,0 +1,306 @@
+/* ================= Progress ================= */
+.pr-of {
+  font-style: normal;
+  font-size: 0.6em;
+  color: var(--text-3);
+  margin-left: 2px;
+}
+
+/* Weekly goal */
+.pr-goal {
+  padding: 22px 24px;
+  display: grid;
+  gap: 16px;
+}
+.pr-goal-text .ab-eyebrow {
+  margin-bottom: 6px;
+}
+.pr-goal-big {
+  margin: 0;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+.pr-goal-big small {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--text-3);
+  margin-left: 8px;
+  font-weight: 700;
+}
+.pr-goal-bar {
+  height: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.pr-goal-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #8dffb0, #6fe3ff, #b99cff);
+  box-shadow: 0 0 18px rgba(111, 227, 255, 0.6);
+  transition: width 1.4s var(--ease) 0.3s;
+}
+.pr-goal.is-in .pr-goal-bar i {
+  width: var(--w);
+}
+
+/* Rings */
+.pr-rings {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+@media (min-width: 720px) {
+  .pr-rings {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.pr-ring-card {
+  --c: #b99cff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 12px 18px;
+  background:
+    radial-gradient(100% 70% at 50% 0%, color-mix(in srgb, var(--c) 14%, transparent), transparent 70%),
+    rgba(255, 255, 255, 0.035);
+  transition:
+    opacity 0.9s var(--ease),
+    transform 0.9s var(--ease),
+    border-color 0.3s,
+    box-shadow 0.4s;
+}
+.pr-ring-card.is-in:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--c) 45%, transparent);
+  box-shadow: 0 20px 50px -22px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.pr-ring-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+.pr-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 8;
+}
+.pr-ring-arc {
+  fill: none;
+  stroke: var(--rc);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 0 999;
+  transition: stroke-dasharray 1.6s var(--ease) 0.25s;
+}
+.pr-ring-card.is-in .pr-ring-arc {
+  stroke-dasharray: var(--dash);
+}
+.pr-ring-glyph {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+}
+.pr-ring-min {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+.pr-ring-min small {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-left: 3px;
+}
+.pr-ring-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* Bests */
+.pr-bests {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.pr-best {
+  --acc: #b99cff;
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px 14px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  text-align: left;
+  transition:
+    transform 0.35s var(--ease),
+    border-color 0.3s,
+    background 0.3s;
+}
+.pr-best:hover {
+  transform: translateX(4px);
+  border-color: color-mix(in srgb, var(--acc) 45%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 10%, transparent), rgba(255, 255, 255, 0.03) 60%);
+}
+.pr-best-glyph {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+}
+.pr-best-glyph .ab-glyph {
+  width: 30px;
+  height: 30px;
+}
+.pr-best-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pr-best-name b {
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pr-best-name small {
+  font-size: 0.76rem;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.pr-best-val {
+  font-size: 1.45rem;
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 420px) {
+  .pr-best .spark {
+    display: none;
+  }
+  .pr-best {
+    grid-template-columns: auto 1fr auto;
+  }
+}
+
+/* Sparkline draw-in */
+.spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 1.4s var(--ease) 0.2s;
+}
+.spark-area,
+.spark-dot {
+  opacity: 0;
+  transition: opacity 0.8s 1s;
+}
+.is-in .spark-line,
+.detail-stats .spark-line {
+  stroke-dashoffset: 0;
+}
+.is-in .spark-area,
+.is-in .spark-dot,
+.detail-stats .spark-area,
+.detail-stats .spark-dot {
+  opacity: 1;
+}
+
+/* Timeline */
+.pr-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 8px;
+  position: relative;
+}
+.pr-timeline::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(185, 156, 255, 0.5), rgba(255, 255, 255, 0.04));
+  border-radius: 2px;
+}
+.pr-timeline li {
+  --acc: #b99cff;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 4px;
+}
+.pr-tl-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--acc);
+  box-shadow:
+    0 0 0 4px var(--bg),
+    0 0 14px var(--acc);
+  position: relative;
+  z-index: 1;
+}
+.pr-tl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pr-tl-body small {
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.pr-tl-score {
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 24px;
+  text-align: center;
+  --c: #9ee6d0;
+}
+.pr-empty h3 {
+  margin: 8px 0 0;
+  font-size: 1.7rem;
+  font-weight: 500;
+}
+.pr-empty p {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  max-width: 38ch;
+}
+
+:root[data-reduced-motion='true'] .pr-ring-arc {
+  stroke-dasharray: var(--dash);
+}
+:root[data-reduced-motion='true'] .spark-line {
+  stroke-dashoffset: 0;
+}
+:root[data-reduced-motion='true'] .spark-area,
+:root[data-reduced-motion='true'] .spark-dot {
+  opacity: 1;
+}
+:root[data-reduced-motion='true'] .pr-goal-bar i {
+  width: var(--w);
+}

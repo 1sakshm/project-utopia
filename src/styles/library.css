@@ -1,0 +1,308 @@
+/* ================= Library ================= */
+.lib-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  min-height: 54px;
+  padding: 0 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-3);
+  transition:
+    border-color 0.3s,
+    box-shadow 0.4s,
+    background 0.3s;
+}
+.lib-search:focus-within {
+  border-color: rgba(185, 156, 255, 0.6);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 4px rgba(185, 156, 255, 0.15), 0 16px 40px -18px rgba(185, 156, 255, 0.6);
+  color: var(--text);
+}
+.lib-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: 600 1rem var(--font-ui);
+}
+.lib-search input::placeholder {
+  color: var(--text-3);
+}
+.lib-filters .ed-pills + .ed-pills {
+  margin-top: 2px;
+}
+.lib-sep {
+  flex: none;
+  width: 1px;
+  margin: 8px 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.lib-count {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 2px 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.lib-clear {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.85rem;
+}
+
+/* Grid */
+.lib2-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .lib2-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+  }
+}
+.lib2-tile {
+  --acc: #b99cff;
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4.2;
+  padding: 0;
+  border-radius: 26px;
+  overflow: hidden;
+  isolation: isolate;
+  text-align: left;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transform: translateZ(0);
+  transition:
+    transform 0.5s var(--ease),
+    box-shadow 0.5s var(--ease),
+    border-color 0.4s;
+}
+.lib2-tile:hover,
+.lib2-tile:focus-visible {
+  transform: translateY(-6px);
+  border-color: color-mix(in srgb, var(--acc) 55%, transparent);
+  box-shadow: 0 28px 60px -24px color-mix(in srgb, var(--acc) 70%, transparent);
+}
+.lib2-tile:active {
+  transform: translateY(-2px) scale(0.98);
+}
+.lib2-poster {
+  transition:
+    transform 0.9s var(--ease),
+    filter 0.6s;
+  filter: saturate(1.05);
+}
+.lib2-tile:hover .lib2-poster {
+  transform: scale(1.07);
+  filter: saturate(1.25) brightness(1.08);
+}
+.lib2-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(80% 50% at 50% 110%, color-mix(in srgb, var(--acc) 45%, transparent), transparent 70%);
+  opacity: 0.6;
+  transition: opacity 0.5s;
+  z-index: 1;
+}
+.lib2-tile:hover .lib2-glow {
+  opacity: 1;
+}
+.lib2-scrim {
+  position: absolute;
+  inset: 34% 0 0 0;
+  background: linear-gradient(180deg, transparent, rgba(5, 6, 12, 0.6) 40%, rgba(5, 6, 12, 0.95));
+  z-index: 1;
+}
+.lib2-top {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  z-index: 2;
+}
+.lib2-new {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(141, 255, 196, 0.16);
+  border: 1px solid rgba(141, 255, 196, 0.45);
+  color: #8dffc4;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+.lib2-fav {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(10, 12, 20, 0.5);
+  color: #ff8fb1;
+  backdrop-filter: blur(8px);
+}
+.lib2-play {
+  position: absolute;
+  right: 14px;
+  top: 44%;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #120e24;
+  background: #fff;
+  box-shadow: 0 10px 30px -6px color-mix(in srgb, var(--acc) 80%, transparent);
+  opacity: 0;
+  transform: translateY(10px) scale(0.8);
+  transition:
+    opacity 0.35s var(--ease),
+    transform 0.45s var(--ease);
+}
+.lib2-play svg {
+  margin-left: 2px;
+}
+.lib2-tile:hover .lib2-play,
+.lib2-tile:focus-visible .lib2-play {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: none) {
+  .lib2-play {
+    display: none;
+  }
+}
+.lib2-text {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.lib2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 9px 0 4px;
+  border-radius: 999px;
+  background: rgba(10, 12, 20, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.lib2-chip i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 0.55rem;
+  font-weight: 900;
+  color: #0b0d14;
+}
+.lib2-chip span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib2-title {
+  font-size: clamp(1.35rem, 4.5vw, 1.7rem);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+}
+.lib2-hook {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition:
+    max-height 0.5s var(--ease),
+    opacity 0.4s;
+}
+.lib2-tile:hover .lib2-hook,
+.lib2-tile:focus-visible .lib2-hook {
+  max-height: 3em;
+  opacity: 1;
+}
+@media (hover: none) {
+  .lib2-hook {
+    display: none;
+  }
+}
+.lib2-meta {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.lib2-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px currentColor;
+  opacity: 0;
+  transition: opacity 0.4s;
+  z-index: 3;
+  pointer-events: none;
+}
+.lib2-tile:hover .lib2-ring {
+  opacity: 0.35;
+}
+
+.lib-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 24px;
+  text-align: center;
+}
+.lib-empty h3 {
+  margin: 8px 0 0;
+  font-size: 1.7rem;
+  font-weight: 500;
+}
+.lib-empty p {
+  margin: 0 0 12px;
+  color: var(--text-2);
+}
