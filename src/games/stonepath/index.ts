@@ -47,7 +47,7 @@ export default defineGame({
       { key: 'avgExtra', label: 'Avg. extra moves', better: 'lower' },
       { key: 'planSec', label: 'Planning time', unit: 's' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

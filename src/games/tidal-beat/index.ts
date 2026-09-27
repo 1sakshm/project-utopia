@@ -43,7 +43,7 @@ export default defineGame({
       { key: 'steadiness', label: 'Steadiness', unit: '%', better: 'higher' },
       { key: 'drift', label: 'Tempo drift', unit: '%', better: 'lower' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and music procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and music procedurally generated'],
   },
   load: () => import('./game'),
 });

@@ -46,7 +46,7 @@ export default defineGame({
       { key: 'hardest', label: 'Hardest pattern solved (level)', better: 'higher' },
       { key: 'firstTry', label: 'Solved first try', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

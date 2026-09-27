@@ -46,7 +46,7 @@ export default defineGame({
       { key: 'perfect', label: 'Lanterns released', better: 'higher' },
       { key: 'accuracy', label: 'Tap accuracy', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry, textures and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry, textures and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

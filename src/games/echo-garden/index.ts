@@ -41,7 +41,7 @@ export default defineGame({
       { key: 'longestReverse', label: 'Longest reverse', better: 'higher' },
       { key: 'accuracy', label: 'Accuracy', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

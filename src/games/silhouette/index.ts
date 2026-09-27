@@ -47,7 +47,7 @@ export default defineGame({
       { key: 'perfect', label: 'Perfect solves', better: 'higher' },
       { key: 'choiceAcc', label: 'Choice accuracy', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

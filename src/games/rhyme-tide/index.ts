@@ -50,7 +50,7 @@ export default defineGame({
       { key: 'accuracy', label: 'First-try accuracy', unit: '%', better: 'higher' },
       { key: 'longest', label: 'Longest word built', unit: 'syllables', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated', 'Voice: your device’s speech synthesis'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated', 'Voice: your device’s speech synthesis'],
   },
   load: () => import('./game'),
 });

@@ -45,7 +45,7 @@ export default defineGame({
       { key: 'maxHarmony', label: 'Max harmony', better: 'higher' },
       { key: 'survival', label: 'Orbit time', unit: 's', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and music procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and music procedurally generated'],
   },
   load: () => import('./game'),
 });

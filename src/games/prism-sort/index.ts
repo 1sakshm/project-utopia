@@ -49,7 +49,7 @@ export default defineGame({
       { key: 'perseverative', label: 'Stuck on old rule', better: 'lower' },
       { key: 'accuracy', label: 'Accuracy', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry, shaders and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry, shaders and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

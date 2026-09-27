@@ -46,7 +46,7 @@ export default defineGame({
       { key: 'avgRt', label: 'Average response', unit: 'ms', better: 'lower' },
       { key: 'bestStreak', label: 'Best streak', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

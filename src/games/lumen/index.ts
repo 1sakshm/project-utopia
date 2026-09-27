@@ -47,7 +47,7 @@ export default defineGame({
       { key: 'chambers', label: 'Chambers solved', better: 'higher' },
       { key: 'perfect', label: 'Perfect chambers', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

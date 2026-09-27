@@ -45,7 +45,7 @@ export default defineGame({
       { key: 'accuracy', label: 'Accuracy', unit: '%', better: 'higher' },
       { key: 'constellations', label: 'Constellations', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All constellations, textures and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All constellations, textures and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

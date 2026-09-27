@@ -47,7 +47,7 @@ export default defineGame({
       { key: 'peripheral', label: 'Firefly spotted', unit: '%', better: 'higher' },
       { key: 'center', label: 'Creature named', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

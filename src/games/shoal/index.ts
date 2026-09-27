@@ -46,7 +46,7 @@ export default defineGame({
       { key: 'maxTracked', label: 'Most fish tracked', better: 'higher' },
       { key: 'accuracy', label: 'Accuracy', unit: '%', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All fish, reef and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All fish, reef and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

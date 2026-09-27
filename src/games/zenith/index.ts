@@ -46,7 +46,7 @@ export default defineGame({
       { key: 'meanError', label: 'Mean timing error', unit: 'ms', better: 'lower' },
       { key: 'bestCombo', label: 'Best combo', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry, shaders and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry, shaders and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

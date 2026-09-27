@@ -38,7 +38,7 @@ export default defineGame({
       { key: 'calm', label: 'Calm hands (stops)', unit: '%', better: 'higher' },
       { key: 'avgCatch', label: 'Average catch', unit: 'ms', better: 'lower' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

@@ -47,7 +47,7 @@ export default defineGame({
       { key: 'breaths', label: 'Breaths taken' },
       { key: 'noticed', label: 'Moments noticed' },
     ],
-    credits: ['Design & code: Utopia team', 'All geometry, shaders and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All geometry, shaders and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

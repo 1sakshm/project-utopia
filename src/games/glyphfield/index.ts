@@ -48,7 +48,7 @@ export default defineGame({
       { key: 'avgSearch', label: 'Average search', unit: 'ms', better: 'lower' },
       { key: 'bestStreak', label: 'Best streak', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All runes, art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All runes, art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });

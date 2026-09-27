@@ -49,7 +49,7 @@ export default defineGame({
       { key: 'faRate', label: 'False alarms', unit: '%', better: 'lower' },
       { key: 'watch', label: 'Watch quality (1–5 lamps)', better: 'higher' },
     ],
-    credits: ['Design & code: Utopia team', 'All art and sound procedurally generated'],
+    credits: ['Design & code: Saksham Sharma (& Claude)', 'All art and sound procedurally generated'],
   },
   load: () => import('./game'),
 });
