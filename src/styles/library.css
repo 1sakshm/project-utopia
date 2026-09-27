@@ -212,7 +212,7 @@
   gap: 6px;
   max-width: 100%;
   min-height: 24px;
-  padding: 0 9px 0 4px;
+  padding: 0 9px 0 3px;
   border-radius: 999px;
   background: rgba(10, 12, 20, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -220,18 +220,6 @@
   -webkit-backdrop-filter: blur(8px);
   font-size: 0.68rem;
   font-weight: 700;
-}
-.lib2-chip i {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-style: normal;
-  font-size: 0.55rem;
-  font-weight: 900;
-  color: #0b0d14;
 }
 .lib2-chip span {
   min-width: 0;

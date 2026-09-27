@@ -206,6 +206,82 @@ export function Stat({ value, label, animate = false }: { value: number | string
   );
 }
 
+/** Mini glyphs, drawn on a 24-unit grid with bold strokes so they stay legible at 14–20px. */
+const MINI: Record<RingId, ReactNode> = {
+  memory: (
+    <>
+      <circle className="g-pulse" cx="12" cy="12" r="5" />
+      <circle className="g-pulse p2" cx="12" cy="12" r="5" />
+      <circle className="g-dot" cx="12" cy="12" r="3" />
+    </>
+  ),
+  attention: (
+    <>
+      <circle className="g-line" cx="12" cy="12" r="8.5" />
+      <g className="g-spin">
+        <path className="g-fill-soft" d="M12 12 L12 3.5 A8.5 8.5 0 0 1 19.4 8 Z" />
+      </g>
+      <circle className="g-dot" cx="12" cy="12" r="2.4" />
+    </>
+  ),
+  perception: (
+    <g className="g-rock">
+      <path className="g-line" d="M2.5 12 C 6 6, 18 6, 21.5 12 C 18 18, 6 18, 2.5 12 Z" />
+      <circle className="g-dot" cx="12" cy="12" r="3.4" />
+    </g>
+  ),
+  reasoning: (
+    <>
+      {[0, 1].map((r) =>
+        [0, 1].map((c) => <rect key={`${r}${c}`} className="g-cell" style={{ '--k': r * 2 + c } as CSSProperties} x={4.5 + c * 8} y={4.5 + r * 8} width="7" height="7" rx="2" />),
+      )}
+    </>
+  ),
+  language: (
+    <>
+      {[0, 1, 2, 3, 4].map((k) => (
+        <rect key={k} className="g-bar" style={{ '--k': k } as CSSProperties} x={3.5 + k * 3.7} y="5" width="2.4" height="14" rx="1.2" />
+      ))}
+    </>
+  ),
+  control: (
+    <>
+      <circle className="g-line" cx="7.5" cy="12" r="4.5" />
+      <rect className="g-line" x="13" y="7.5" width="9" height="9" rx="2" />
+      <circle className="g-dot g-switch" cx="7.5" cy="12" r="2.2" />
+    </>
+  ),
+  timing: (
+    <>
+      <path className="g-line" d="M6.5 21 L12 3 L17.5 21 Z" />
+      <g className="g-swing">
+        <line className="g-stroke" x1="12" y1="18" x2="12" y2="7" />
+        <circle className="g-dot" cx="12" cy="9" r="2" />
+      </g>
+    </>
+  ),
+  calm: (
+    <>
+      <circle className="g-breathe" cx="12" cy="12" r="5.5" />
+      <circle className="g-line" cx="12" cy="12" r="9" />
+    </>
+  ),
+};
+
+/**
+ * Small ability badge: tinted disc + mini glyph. Still by default so long lists stay calm;
+ * animates when `live`, or when an ancestor is hovered / focused / pressed / .is-active.
+ */
+export function AbilityIcon({ id, color, live = false, size = 22 }: { id: RingId; color: string; live?: boolean; size?: number }) {
+  return (
+    <span className={`ab-icon ${live ? 'is-live' : ''}`} style={{ '--c': color, '--s': `${size}px` } as CSSProperties} aria-hidden>
+      <svg className="ab-glyph is-mini" viewBox="0 0 24 24">
+        {MINI[id]}
+      </svg>
+    </span>
+  );
+}
+
 /** Small animated glyph per ability family (pure SVG + CSS). */
 export function AbilityGlyph({ id, className }: { id: RingId; className?: string }) {
   const glyphs: Record<RingId, ReactNode> = {

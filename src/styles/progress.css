@@ -304,3 +304,10 @@
 :root[data-reduced-motion='true'] .pr-goal-bar i {
   width: var(--w);
 }
+/* Bests list: glyphs rest until the row is hovered/focused, so a long list stays calm */
+.pr-best-glyph .ab-glyph * {
+  animation-play-state: paused;
+}
+.pr-best:is(:hover, :focus-visible) .pr-best-glyph .ab-glyph * {
+  animation-play-state: running;
+}

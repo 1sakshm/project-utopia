@@ -166,7 +166,7 @@ a {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 30px;
   padding: 0 12px;
   border-radius: 999px;
@@ -176,16 +176,6 @@ a {
   font-weight: 700;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-}
-.chip-glyph {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: inline-grid;
-  place-items: center;
-  font-size: 0.62rem;
-  font-weight: 800;
-  color: #0b0d14;
 }
 
 /* ---------- In-game DOM helpers (usable by games) ---------- */
@@ -229,4 +219,7 @@ a {
 :root[data-reduced-motion='true'] * {
   transition-duration: 0.01ms !important;
   animation-duration: 0.01ms !important;
+}
+.chip-ability {
+  padding-left: 4px;
 }

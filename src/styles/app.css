@@ -133,13 +133,6 @@
   visibility: hidden;
   pointer-events: none;
 }
-.feed-ambient {
-  position: absolute;
-  inset: -10%;
-  filter: blur(40px);
-  transition: background 0.8s var(--ease);
-  opacity: 0.9;
-}
 .feed-column {
   position: relative;
   height: 100%;
@@ -289,48 +282,6 @@
   color: #ff8fb1;
   border-color: rgba(255, 143, 177, 0.5);
 }
-.card-meta {
-  position: absolute;
-  left: 20px;
-  right: 80px;
-  bottom: 96px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  z-index: 2;
-  pointer-events: none;
-}
-.card-meta .chip {
-  pointer-events: auto;
-}
-.card-title {
-  margin: 4px 0 0;
-  font-size: clamp(2rem, 8vw, 2.6rem);
-  font-weight: 600;
-  line-height: 1;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.5);
-}
-.card-hook {
-  margin: 0;
-  font-size: 1.02rem;
-  color: var(--text-2);
-  font-weight: 600;
-  max-width: 30ch;
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
-}
-.card-sub {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-3);
-  font-weight: 700;
-}
-.card-best {
-  color: var(--acc, var(--accent));
-}
-.card-new {
-  color: #8dffc4;
-}
 .card-play {
   position: absolute;
   right: 18px;
@@ -371,39 +322,6 @@
   }
 }
 
-.card-end {
-  display: grid;
-  place-items: center;
-  background: radial-gradient(60% 40% at 50% 35%, rgba(185, 156, 255, 0.25), transparent 70%), linear-gradient(180deg, #0b0d1f, #151232);
-}
-.end-inner {
-  max-width: 360px;
-  padding: 24px;
-  text-align: center;
-}
-.end-inner h2 {
-  font-size: 2.1rem;
-  margin: 18px 0 10px;
-}
-.end-inner p {
-  color: var(--text-2);
-  line-height: 1.55;
-}
-.end-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 24px;
-}
-.end-orb {
-  width: 96px;
-  height: 96px;
-  margin: 0 auto;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fff4d0, #ffb3d1 35%, #8b6cff 70%, transparent 72%);
-  box-shadow: 0 0 60px rgba(185, 156, 255, 0.6);
-  animation: breathe 5s ease-in-out infinite;
-}
 
 .coach {
   position: absolute;
@@ -1484,4 +1402,275 @@ kbd {
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+/* ================= Feed: editorial card design ================= */
+@property --a1 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #8b6cff;
+}
+@property --a2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff8fb1;
+}
+@property --a3 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #6fe3ff;
+}
+
+/* Desktop backdrop: drifting aurora in the active game's colors (cross-fades between games) */
+.feed-shell > .feed-ambient.ab-aurora {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  opacity: 0.7;
+  transform: none;
+  transition:
+    --a1 1.2s var(--ease),
+    --a2 1.2s var(--ease),
+    --a3 1.2s var(--ease);
+}
+.feed-column,
+.feed-side {
+  z-index: 1;
+}
+@media (max-width: 1023px) {
+  .feed-shell > .feed-ambient.ab-aurora {
+    display: none; /* cards are full-bleed on phones */
+  }
+}
+
+.card-meta {
+  position: absolute;
+  left: 20px;
+  right: 80px;
+  bottom: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  z-index: 2;
+  pointer-events: none;
+}
+.card-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+}
+.card-title {
+  margin: 0;
+  font-size: clamp(2.3rem, 9.5vw, 3rem);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  text-shadow: 0 2px 28px rgba(0, 0, 0, 0.45);
+}
+.card-word {
+  display: inline-block;
+}
+.card-word.is-accent {
+  font-style: italic;
+  padding: 0 0.14em 0.08em 0.02em;
+  margin: 0 -0.08em -0.08em 0;
+  background: linear-gradient(100deg, #fff4e0 0%, var(--acc, #b99cff) 55%, var(--acc2, #6fe3ff) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.35));
+}
+/* Words rise in each time a card becomes the active one */
+.is-active .card-word {
+  animation: ab-word-in-from 0.85s var(--ease) both;
+  animation-delay: calc(80ms + var(--d, 0ms));
+}
+.is-active .card-word.is-accent {
+  animation:
+    ab-word-in-from 0.85s var(--ease) both,
+    ab-sheen 7s ease-in-out 1s infinite alternate;
+  animation-delay: calc(80ms + var(--d, 0ms)), 1s;
+}
+.card-hook {
+  margin: 0;
+  max-width: 30ch;
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-2);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+.card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.card-stat {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(10, 12, 20, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.card-stat.is-best {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--acc, #b99cff) 55%, transparent);
+  background: color-mix(in srgb, var(--acc, #b99cff) 16%, rgba(10, 12, 20, 0.5));
+}
+.card-stat.is-new {
+  color: #8dffc4;
+  border-color: rgba(141, 255, 196, 0.4);
+  background: rgba(141, 255, 196, 0.1);
+}
+.is-active .card-hook,
+.is-active .card-stats,
+.is-active .card-kicker {
+  animation: ab-fade-in-from 0.8s var(--ease) both;
+}
+.is-active .card-kicker {
+  animation-delay: 0ms;
+}
+.is-active .card-hook {
+  animation-delay: 260ms;
+}
+.is-active .card-stats {
+  animation-delay: 360ms;
+}
+/* Play button picks up the game's color */
+.card-play {
+  box-shadow:
+    0 10px 36px -8px color-mix(in srgb, var(--acc, #b99cff) 70%, transparent),
+    0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
+
+/* End card */
+.card-end {
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  isolation: isolate;
+}
+.end-aurora {
+  --a1: #8b6cff;
+  --a2: #ff8fb1;
+  --a3: #6fe3ff;
+}
+.end-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 380px;
+  padding: 24px 26px;
+}
+.end-inner .ab-kicker {
+  margin-bottom: 16px;
+}
+.end-title {
+  font-size: clamp(2.4rem, 10vw, 3.2rem);
+}
+.end-title .card-word.is-accent {
+  background: linear-gradient(100deg, #fff4c2 0%, #ffb3d1 35%, #b99cff 65%, #6fe3ff 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.end-lead {
+  margin: 16px 0 0;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.end-glyphs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 26px 0 0;
+}
+.is-active .end-glyphs > span {
+  animation: ab-fade-in-from 0.7s var(--ease) both;
+  animation-delay: calc(420ms + var(--d, 0ms));
+}
+.end-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+/* Desktop side panel, editorial */
+.feed-side {
+  --acc: #b99cff;
+}
+@media (min-width: 1024px) {
+  .feed-side {
+    background:
+      radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--acc) 16%, transparent), transparent 60%),
+      rgba(10, 12, 22, 0.6);
+  }
+}
+.feed-side-eyebrow {
+  margin: 0;
+}
+.feed-side .card-title.feed-side-title {
+  font-size: 2.5rem;
+  text-shadow: none;
+}
+.feed-side-desc {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.55;
+  font-size: 0.95rem;
+  animation: ab-fade-in-from 0.8s var(--ease) 0.25s both;
+}
+.feed-side .game-info {
+  animation: ab-fade-in-from 0.8s var(--ease) 0.35s both;
+}
+
+@keyframes ab-word-in-from {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em) rotate(2deg);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes ab-fade-in-from {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+:root[data-reduced-motion='true'] .card-word,
+:root[data-reduced-motion='true'] .card-hook,
+:root[data-reduced-motion='true'] .card-stats,
+:root[data-reduced-motion='true'] .card-kicker,
+:root[data-reduced-motion='true'] .end-glyphs > span {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}
+:root[data-contrast='high'] .card-word.is-accent {
+  background: none;
+  color: #ffe08a;
 }

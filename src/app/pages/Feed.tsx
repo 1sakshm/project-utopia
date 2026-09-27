@@ -7,7 +7,9 @@ import { usePlayUi } from '@/platform/play';
 import { track } from '@/platform/analytics';
 import { audioEngine } from '@/runtime/audio';
 import { navigate, useRoute } from '../router';
-import { AbilityChip, LivePreview, PosterArt, formatScore } from '../components/Common';
+import { LivePreview, PosterArt, formatScore } from '../components/Common';
+import { AbilityIcon } from '../components/Editorial';
+import { ABILITY_LABEL, RINGS, ringOf } from '@/platform/abilities';
 import { GameInfo } from '../components/GameInfo';
 import { Sheet } from '../components/Sheet';
 import { IconArrowDown, IconArrowUp, IconCalendar, IconHeart, IconInfo, IconPlay, IconSound, IconGrid } from '../components/Icons';
@@ -169,17 +171,22 @@ export default function Feed({ hidden }: { hidden: boolean }) {
   return (
     <div className={`feed-shell ${hidden ? 'is-hidden' : ''}`} inert={hidden} aria-hidden={hidden}>
       <div
-        className="feed-ambient"
+        className="feed-ambient ab-aurora"
         style={
           activeGame
-            ? {
-                background: `radial-gradient(60% 50% at 30% 30%, ${activeGame.manifest.palette.accent}33, transparent 70%),
-                   radial-gradient(50% 50% at 75% 70%, ${activeGame.manifest.palette.accent2}2a, transparent 70%), ${activeGame.manifest.palette.bg}`,
-              }
+            ? ({
+                '--a1': activeGame.manifest.palette.accent,
+                '--a2': activeGame.manifest.palette.accent2,
+                '--a3': activeGame.manifest.palette.highlight,
+              } as React.CSSProperties)
             : undefined
         }
         aria-hidden
-      />
+      >
+        <i className="b1" />
+        <i className="b2" />
+        <i className="b3" />
+      </div>
       <div className="feed-column">
         <div className="feed" ref={scroller} tabIndex={-1} aria-label="Game feed" role="feed">
           {items.map((it, i) => (
@@ -213,8 +220,18 @@ export default function Feed({ hidden }: { hidden: boolean }) {
         </div>
       </div>
       {activeGame && (
-        <aside className="feed-side" aria-label={`About ${activeGame.manifest.title}`}>
-          <h2 className="display">{activeGame.manifest.title}</h2>
+        <aside
+          key={activeGame.manifest.id}
+          className="feed-side is-active"
+          aria-label={`About ${activeGame.manifest.title}`}
+          style={{ ['--acc' as string]: activeGame.manifest.palette.accent, ['--acc2' as string]: activeGame.manifest.palette.accent2 }}
+        >
+          <p className="ab-eyebrow feed-side-eyebrow">
+            <AbilityIcon id={ringOf(activeGame.manifest.abilities.primary).id} color={ringOf(activeGame.manifest.abilities.primary).color} live size={22} />
+            {ABILITY_LABEL[activeGame.manifest.abilities.primary]}
+          </p>
+          <FeedTitle title={activeGame.manifest.title} as="p" className="feed-side-title" />
+          <p className="feed-side-desc">{activeGame.manifest.description}</p>
           <GameInfo m={activeGame.manifest} compact />
           <button className="btn" onClick={() => navigate(`/game/${activeGame.manifest.id}`)}>
             Full details
@@ -266,7 +283,7 @@ const FeedCard = memo(function FeedCard({
   onInfo: (id: string) => void;
   onNext: () => void;
 }) {
-  if (item.type === 'end') return <EndCard cycle={item.cycle} index={index} onNext={onNext} />;
+  if (item.type === 'end') return <EndCard cycle={item.cycle} index={index} active={active} onNext={onNext} />;
   return <GameCard item={item} index={index} total={total} active={active} near={near} onInfo={onInfo} />;
 });
 
@@ -294,11 +311,12 @@ function GameCard({
   const cardRef = useRef<HTMLElement>(null);
   const best = item.variant === 'daily' ? (prog?.dailyBest?.day === today() ? prog.dailyBest.score : 0) : prog?.best ?? 0;
   const [hint, setHint] = useState(false);
+  const ring = ringOf(m.abilities.primary);
 
   return (
     <article
       ref={cardRef}
-      className="card"
+      className={`card ${active ? 'is-active' : ''}`}
       data-feed-index={index}
       aria-label={`Game ${(index % (total / 2)) + 1}: ${m.title}. ${m.hook}`}
       style={{ ['--acc' as string]: m.palette.accent, ['--acc2' as string]: m.palette.accent2 }}
@@ -359,21 +377,17 @@ function GameCard({
         </button>
       </div>
       <div className="card-meta">
-        <AbilityChip ability={m.abilities.primary} />
-        <h2 className="card-title display">{m.title}</h2>
-        <p className="card-hook">{m.hook}</p>
-        <p className="card-sub">
-          {m.sessionLabel}
-          {m.showScore !== false && best > 0 && (
-            <>
-              {' · '}
-              <span className="card-best">
-                Best {formatScore(best)}
-              </span>
-            </>
-          )}
-          {prog?.sessions ? null : <> · <span className="card-new">New</span></>}
+        <p className="card-kicker">
+          <AbilityIcon id={ring.id} color={ring.color} live={active} size={22} />
+          <span>{ABILITY_LABEL[m.abilities.primary]}</span>
         </p>
+        <FeedTitle title={m.title} />
+        <p className="card-hook">{m.hook}</p>
+        <div className="card-stats">
+          <span className="card-stat">{m.sessionLabel}</span>
+          {m.showScore !== false && best > 0 && <span className="card-stat is-best">Best {formatScore(best)}</span>}
+          {!prog?.sessions && <span className="card-stat is-new">New</span>}
+        </div>
       </div>
       <button
         className="btn btn-primary btn-lg card-play"
@@ -389,18 +403,49 @@ function GameCard({
   );
 }
 
-function EndCard({ cycle, index, onNext }: { cycle: number; index: number; onNext: () => void }) {
+/** Editorial title: last word in the game's gradient italic; words rise in when the card is active. */
+function FeedTitle({ title, as: Tag = 'h2', className = '' }: { title: string; as?: 'h2' | 'p'; className?: string }) {
+  const words = title.split(' ');
+  return (
+    <Tag className={`card-title display ${className}`}>
+      {words.map((w, i) => (
+        <span key={i}>
+          <span className={`card-word ${i === words.length - 1 ? 'is-accent' : ''}`} style={{ ['--d' as string]: `${i * 90}ms` }}>
+            {w}
+          </span>
+          {i < words.length - 1 ? ' ' : null}
+        </span>
+      ))}
+    </Tag>
+  );
+}
+
+function EndCard({ cycle, index, active, onNext }: { cycle: number; index: number; active: boolean; onNext: () => void }) {
   const route = useRoute((s) => s.navigate);
   return (
-    <article className="card card-end" data-feed-index={index}>
+    <article className={`card card-end ${active ? 'is-active' : ''}`} data-feed-index={index}>
+      <div className="ab-aurora end-aurora" aria-hidden>
+        <i className="b1" />
+        <i className="b2" />
+        <i className="b3" />
+      </div>
       <div className="end-inner">
-        <div className="end-orb" aria-hidden />
-        <h2 className="display">{cycle === 0 ? 'You’ve seen them all' : 'That’s today’s seeds'}</h2>
-        <p>
-          {cycle === 0
-            ? 'Twenty little worlds. Replay a favorite, browse by ability, or keep going for today’s Daily Seeds — the same puzzles everyone gets today.'
-            : 'You’ve reached the end of the feed. Maybe a good moment for a stretch, or a slow breath with Still Water.'}
+        <p className="ab-kicker">
+          <span className="ab-orb" aria-hidden /> {cycle === 0 ? 'End of the feed' : 'Today’s seeds'}
         </p>
+        <FeedTitle title={cycle === 0 ? 'You’ve seen them all.' : 'That’s every seed.'} className="end-title" />
+        <p className="end-lead">
+          {cycle === 0
+            ? 'Every little world, seen once. Replay a favorite, browse by ability, or keep going for today’s Daily Seeds: the same puzzles everyone gets today.'
+            : 'You’ve reached the very end. Maybe a good moment for a stretch, or a slow breath with Still Water.'}
+        </p>
+        <div className="end-glyphs" aria-hidden>
+          {RINGS.map((r, i) => (
+            <span key={r.id} style={{ ['--d' as string]: `${i * 70}ms` }}>
+              <AbilityIcon id={r.id} color={r.color} live={active} size={34} />
+            </span>
+          ))}
+        </div>
         <div className="end-actions">
           <button className="btn" onClick={() => route('/library')}>
             <IconGrid width={18} height={18} /> Browse library

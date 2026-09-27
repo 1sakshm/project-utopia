@@ -4,7 +4,7 @@ import { RINGS, ABILITY_RING, ABILITY_LABEL, type RingId } from '@/platform/abil
 import { useProgress } from '@/platform/progress';
 import { navigate } from '../router';
 import { PosterArt, formatScore } from '../components/Common';
-import { AbilityGlyph, Hero, d, useReveal } from '../components/Editorial';
+import { AbilityGlyph, AbilityIcon, Hero, d, useReveal } from '../components/Editorial';
 import { IconHeart, IconPlay } from '../components/Icons';
 import '@/styles/library.css';
 
@@ -62,9 +62,7 @@ export default function Library() {
           </button>
           {RINGS.map((r) => (
             <button key={r.id} className="ed-pill" aria-pressed={ring === r.id} onClick={() => setRing(ring === r.id ? 'all' : r.id)}>
-              <span className="chip-glyph" style={{ background: r.color, boxShadow: `0 0 10px ${r.color}` }} aria-hidden>
-                {r.glyph}
-              </span>
+              <AbilityIcon id={r.id} color={r.color} live={ring === r.id} size={22} />
               {r.label}
             </button>
           ))}
@@ -132,9 +130,7 @@ export default function Library() {
                     </span>
                     <span className="lib2-text">
                       <span className="lib2-chip">
-                        <i style={{ background: ringDef.color }} aria-hidden>
-                          {ringDef.glyph}
-                        </i>
+                        <AbilityIcon id={ringDef.id} color={ringDef.color} size={18} />
                         <span>{ABILITY_LABEL[m.abilities.primary]}</span>
                       </span>
                       <span className="lib2-title display">{m.title}</span>

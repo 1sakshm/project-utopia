@@ -6,14 +6,13 @@ import { createGameHost, type GameHost } from '@/runtime/host';
 import { canRunLivePreview } from '@/runtime/quality';
 import { useSettings } from '@/platform/settings';
 import { hashString } from '@/sdk/rng';
+import { AbilityIcon } from './Editorial';
 
-export function AbilityChip({ ability }: { ability: Ability }) {
+export function AbilityChip({ ability, live = false }: { ability: Ability; live?: boolean }) {
   const r = ringOf(ability);
   return (
-    <span className="chip">
-      <span className="chip-glyph" style={{ background: r.color }} aria-hidden>
-        {r.glyph}
-      </span>
+    <span className="chip chip-ability">
+      <AbilityIcon id={r.id} color={r.color} live={live} size={20} />
       {ABILITY_LABEL[ability]}
     </span>
   );
