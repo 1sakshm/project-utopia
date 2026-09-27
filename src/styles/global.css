@@ -1,0 +1,232 @@
+:root {
+  --bg: #0b0d14;
+  --bg-2: #141826;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f4f2ff;
+  --text-2: rgba(244, 242, 255, 0.72);
+  --text-3: rgba(244, 242, 255, 0.5);
+  --accent: #b99cff;
+  --accent-ink: #1a1238;
+  --focus: #ffe08a;
+  --radius-s: 12px;
+  --radius-m: 20px;
+  --radius-l: 28px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  --text-scale: 1;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+:root[data-reading-font='atkinson'] {
+  --font-ui: 'Atkinson Hyperlegible', system-ui, sans-serif;
+}
+
+:root[data-contrast='high'] {
+  --bg: #000;
+  --bg-2: #000;
+  --surface: #111;
+  --surface-2: #1c1c1c;
+  --border: rgba(255, 255, 255, 0.55);
+  --text: #fff;
+  --text-2: #fff;
+  --text-3: #e6e6e6;
+  --accent: #ffe08a;
+  --accent-ink: #000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: calc(16px * var(--text-scale));
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+body {
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  transition: transform 0.18s var(--ease), background 0.2s, box-shadow 0.3s;
+  user-select: none;
+}
+.btn:hover {
+  background: var(--surface-2);
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn-primary {
+  background: linear-gradient(135deg, #fff 0%, #efe8ff 100%);
+  color: #120e24;
+  border: none;
+  box-shadow: 0 8px 30px rgba(185, 156, 255, 0.35);
+}
+.btn-primary:hover {
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(185, 156, 255, 0.55);
+}
+:root[data-contrast='high'] .btn-primary {
+  background: #ffe08a;
+  color: #000;
+}
+.btn-lg {
+  min-height: 58px;
+  padding: 0 30px;
+  font-size: 1.05rem;
+}
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: rgba(10, 12, 20, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: transform 0.18s var(--ease), background 0.2s;
+  padding: 0;
+}
+.icon-btn:hover {
+  background: rgba(30, 32, 50, 0.65);
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+.icon-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.chip-glyph {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #0b0d14;
+}
+
+/* ---------- In-game DOM helpers (usable by games) ---------- */
+.u-game-btn {
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 14, 26, 0.55);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: scale 0.15s var(--ease), background 0.2s;
+  z-index: 5;
+}
+.u-game-btn:active {
+  scale: 0.95;
+}
+.u-game-btn:hover {
+  background: rgba(40, 42, 70, 0.7);
+}
+.u-game-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+:root[data-reduced-motion='true'] * {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+}
