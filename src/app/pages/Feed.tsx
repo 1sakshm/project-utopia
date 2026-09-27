@@ -70,12 +70,51 @@ export default function Feed({ hidden }: { hidden: boolean }) {
       if (coach) dismissCoach();
     };
     el.addEventListener('scroll', onScroll, { passive: true });
+
+    // Reels-style swipe assist: a short flick or a drag past ~18% of the card advances exactly one card.
+    // Native mandatory snapping alone snaps back on short/slow drags without momentum.
+    let touching = false;
+    let startY = 0;
+    let startT = 0;
+    let startIdx = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      touching = true;
+      startY = e.touches[0].clientY;
+      startT = performance.now();
+      startIdx = Math.round(el.scrollTop / Math.max(1, el.clientHeight));
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!touching) return;
+      touching = false;
+      const t0 = e.changedTouches[0];
+      if (!t0) return;
+      const dy = startY - t0.clientY; // > 0 = swipe up = next card
+      const dt = Math.max(1, performance.now() - startT);
+      const h = el.clientHeight;
+      if (Math.abs(dy) < 40 || !(Math.abs(dy) / dt > 0.35 || Math.abs(dy) > h * 0.18)) return;
+      const target = Math.max(0, Math.min(items.length - 1, startIdx + (dy > 0 ? 1 : -1)));
+      el.scrollTo({ top: target * h, behavior: reduced() ? 'auto' : 'smooth' });
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    // Keep the active card aligned when the feed's height changes (rotation, desktop resize) —
+    // but not mid-gesture, and not for sub-pixel jitter from mobile address-bar animations.
+    let lastH = el.clientHeight;
     const ro = new ResizeObserver(() => {
-      el.scrollTop = useFeed.getState().activeIndex * el.clientHeight;
+      const h = el.clientHeight;
+      if (touching || Math.abs(h - lastH) < 2) return;
+      lastH = h;
+      el.scrollTop = useFeed.getState().activeIndex * h;
     });
     ro.observe(el);
     return () => {
       el.removeEventListener('scroll', onScroll);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
       ro.disconnect();
       window.clearTimeout(t);
     };

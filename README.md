@@ -28,6 +28,7 @@ Other scripts:
 | `npm test` | Unit tests (Vitest) |
 | `node scripts/smoke.mjs <gameId\|all>` | Headless Chromium smoke test of a game (preview + play with random input); screenshots in `shots/` |
 | `node scripts/capture-posters.mjs [ids]` | Re-capture feed/library poster frames from each game's live preview into `public/posters/` |
+| `node scripts/touch-scroll.mjs` | Mobile touch-swipe test for the feed (real touch events on live previews) |
 | `node scripts/app-smoke.mjs [--desktop]` | End-to-end platform flow: feed → play → pause → exit returns to same card → pages |
 
 Both smoke scripts need the dev server running and Playwright's Chromium (`npx playwright install chromium`).

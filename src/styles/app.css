@@ -148,6 +148,8 @@
 .feed {
   height: 100%;
   overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   scroll-snap-type: y mandatory;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -240,6 +242,13 @@
   inset: 0;
   opacity: 0;
   transition: opacity 0.35s var(--ease);
+}
+/* Previews are display-only: never let their canvases capture touches, or the feed can't scroll.
+   (R3F forces pointer-events:auto on its wrapper and the SDK sets touch-action:none on game canvases.) */
+.live-preview,
+.live-preview * {
+  pointer-events: none !important;
+  touch-action: pan-y !important;
 }
 .live-preview.is-live {
   opacity: 1;
