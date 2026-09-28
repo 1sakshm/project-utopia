@@ -367,3 +367,6 @@ a {
   font-size: 0.8rem;
   backdrop-filter: blur(10px);
 }
+.u-answer[hidden] {
+  display: none;
+}
