@@ -35,6 +35,17 @@ Other scripts:
 
 Both smoke scripts need the dev server running and Playwright's Chromium (`npx playwright install chromium`).
 
+## Hosting
+
+Two live copies of the same app:
+
+- **Cloudflare Pages:** https://playutopia.pages.dev. Deploy with `npm run deploy:cf` (builds, then uploads `dist/`;
+  the voice API runs from `functions/api/*`, which wrap the same `api/_sarvam.ts` handlers). The Sarvam key is a
+  Pages secret: `npx wrangler pages secret put SARVAM_API_KEY --project-name playutopia`.
+- **Vercel (backup):** https://project-utopia-zeta.vercel.app. Auto-deploys on every push to `main` (`api/*` edge functions).
+
+`VITE_*` variables are baked in at build time, so a Cloudflare deploy uses the values in your local `.env.local`.
+
 ## Environment variables (Vercel)
 
 | Variable | Purpose |
