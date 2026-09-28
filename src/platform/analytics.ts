@@ -1,9 +1,11 @@
+import type { PostHog } from 'posthog-js';
 import { useSettings } from './settings';
 
 /**
- * Typed product analytics (PRD §21). V1 keeps events on-device (ring buffer) — an adapter
- * (e.g. PostHog, cookieless) can be plugged into `send` when a key is configured.
- * Per-trial data is never tracked here.
+ * Typed product analytics (PRD §21).
+ * Events are sent to PostHog only when a project key is configured (VITE_POSTHOG_KEY) and the player
+ * hasn't turned analytics off in Settings. Anonymous by design: a random ID kept in localStorage
+ * (no cookies), no names, emails or per-trial gameplay data. Honors the browser's Do Not Track.
  */
 export type AnalyticsEvent =
   | { name: 'app_open'; is_pwa: boolean; tier?: string; reduced_motion: boolean }
@@ -14,21 +16,86 @@ export type AnalyticsEvent =
   | { name: 'game_exit'; game_id: string; state: string; elapsed_ms: number }
   | { name: 'game_action'; game_id: string; action: 'restart' | 'play_again' | 'next_game' | 'pause' }
   | { name: 'setting_changed'; key: string; value: string }
-  | { name: 'wellbeing_reminder'; action: 'shown' | 'dismiss' | 'still-water' };
+  | { name: 'wellbeing_reminder'; action: 'shown' | 'dismiss' | 'still-water' }
+  | { name: 'feedback_click'; from: string };
+
+const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
+const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) || 'https://us.i.posthog.com';
+// Don't pollute production data from local development / automated tests unless explicitly asked.
+const ALLOW_DEV = import.meta.env.VITE_POSTHOG_DEV === '1';
 
 const buffer: Array<AnalyticsEvent & { t: number; session: string }> = [];
 const session = Math.random().toString(36).slice(2);
+
+let client: PostHog | null = null;
+let loading: Promise<PostHog | null> | null = null;
+const pending: Array<[string, Record<string, unknown>]> = [];
+
+const dnt = () => {
+  const n = navigator as Navigator & { msDoNotTrack?: string };
+  return n.doNotTrack === '1' || n.msDoNotTrack === '1' || (window as Window & { doNotTrack?: string }).doNotTrack === '1';
+};
+
+/** True when remote analytics may be sent right now. */
+export function remoteEnabled(): boolean {
+  if (!KEY || (import.meta.env.DEV && !ALLOW_DEV)) return false;
+  return useSettings.getState().analytics && !dnt();
+}
+
+function load(): Promise<PostHog | null> {
+  if (loading) return loading;
+  loading = import('posthog-js')
+    .then(({ default: posthog }) => {
+      posthog.init(KEY!, {
+        api_host: HOST,
+        persistence: 'localStorage', // no cookies
+        autocapture: false, // only our typed events (never raw clicks/inputs)
+        capture_pageview: false, // SPA: page views are sent explicitly on route change
+        capture_pageleave: false,
+        disable_session_recording: true,
+        respect_dnt: true,
+        person_profiles: 'always', // anonymous profiles, so unique + returning players can be counted
+      });
+      posthog.register({
+        app: 'utopia-web',
+        is_pwa: window.matchMedia('(display-mode: standalone)').matches,
+      });
+      client = posthog;
+      for (const [name, props] of pending.splice(0)) posthog.capture(name, props);
+      return posthog;
+    })
+    .catch(() => null);
+  return loading;
+}
+
+function send(name: string, props: Record<string, unknown>) {
+  if (!remoteEnabled()) return;
+  if (client) client.capture(name, props);
+  else {
+    if (pending.length < 200) pending.push([name, props]);
+    void load();
+  }
+}
 
 export function track(e: AnalyticsEvent) {
   const rec = { ...e, t: Date.now(), session };
   buffer.push(rec);
   if (buffer.length > 500) buffer.shift();
-  if (useSettings.getState().analytics) send(rec);
+  const { name, ...props } = e;
+  send(name, props);
   if (import.meta.env.DEV) console.debug('[analytics]', e.name, e);
 }
 
-function send(_e: AnalyticsEvent & { t: number }) {
-  // Adapter hook: no remote endpoint configured in V1.
+/** SPA page view (call on route change). */
+export function trackPage(path: string) {
+  send('$pageview', { $current_url: window.location.origin + path, path });
 }
+
+// Turning analytics off/on in Settings takes effect immediately.
+useSettings.subscribe((s, prev) => {
+  if (s.analytics === prev.analytics || !client) return;
+  if (s.analytics) client.opt_in_capturing();
+  else client.opt_out_capturing();
+});
 
 export const analyticsBuffer = () => [...buffer];

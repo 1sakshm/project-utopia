@@ -5,6 +5,7 @@ import { track } from '@/platform/analytics';
 import { audioEngine } from '@/runtime/audio';
 import { navigate } from '../router';
 import { Hero, SectionHead, useReveal } from '../components/Editorial';
+import { FEEDBACK_URL, FeedbackButton } from '../components/Feedback';
 import '@/styles/settings.css';
 
 type Opt<T> = ReadonlyArray<readonly [T, string]>;
@@ -300,7 +301,7 @@ export default function Settings() {
       </Group>
 
       <Group id="data">
-        <Toggle k="analytics" label="Share anonymous product analytics" desc="Off by default. No trial-level data is ever collected." />
+        <Toggle k="analytics" label="Share anonymous usage stats" desc="Helps Saksham see which games people enjoy and come back to. A random ID only: no names, emails, cookies or gameplay details." />
         <ActionRow label="Your data stays on this device" desc="Progress is stored locally. Export it any time.">
           <button className="btn" onClick={exportData}>
             Export JSON
@@ -361,6 +362,14 @@ export default function Settings() {
             →
           </span>
         </button>
+        {FEEDBACK_URL && (
+          <div className="set2-feedback" data-reveal>
+            <p>
+              <b>Tell me what you think.</b> What felt great, what felt hard, what you’d change. Every message is read.
+            </p>
+            <FeedbackButton from="settings" className="btn btn-primary" />
+          </div>
+        )}
       </section>
     </div>
   );

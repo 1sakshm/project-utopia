@@ -29,9 +29,22 @@ Other scripts:
 | `node scripts/smoke.mjs <gameId\|all>` | Headless Chromium smoke test of a game (preview + play with random input); screenshots in `shots/` |
 | `node scripts/capture-posters.mjs [ids]` | Re-capture feed/library poster frames from each game's live preview into `public/posters/` |
 | `node scripts/touch-scroll.mjs` | Mobile touch-swipe test for the feed (real touch events on live previews) |
+| `node scripts/analytics-check.mjs` | Verifies analytics (on/off/migration/outage) against a build with a dummy key (see header) |
 | `node scripts/app-smoke.mjs [--desktop]` | End-to-end platform flow: feed → play → pause → exit returns to same card → pages |
 
 Both smoke scripts need the dev server running and Playwright's Chromium (`npx playwright install chromium`).
+
+## Analytics & feedback (Vercel environment variables)
+
+| Variable | Purpose |
+|---|---|
+| `VITE_POSTHOG_KEY` | PostHog project API key (`phc_...`). When unset, nothing is sent. |
+| `VITE_POSTHOG_HOST` | Optional. `https://us.i.posthog.com` (default) or `https://eu.i.posthog.com`. |
+| `VITE_FEEDBACK_URL` | Optional. A feedback form link (Tally / Google Forms). Shows "Share feedback" buttons when set. |
+
+Analytics are anonymous (random ID in localStorage, no cookies, no names/emails, no per-trial data), on by
+default with an off switch in Settings, and honor Do Not Track. Nothing is sent from local dev unless
+`VITE_POSTHOG_DEV=1`.
 
 ## Routes
 

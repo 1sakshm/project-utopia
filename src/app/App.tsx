@@ -4,7 +4,7 @@ import Feed, { openGame } from './pages/Feed';
 import PlayOverlay from './components/PlayOverlay';
 import { useSettings, prefersReducedMotion } from '@/platform/settings';
 import { usePlayUi } from '@/platform/play';
-import { track } from '@/platform/analytics';
+import { track, trackPage } from '@/platform/analytics';
 import { loadPosters } from '@/platform/posters';
 import { audioEngine } from '@/runtime/audio';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
@@ -45,6 +45,11 @@ export default function App() {
     void loadPosters(GAMES.map((g) => g.manifest.id));
     track({ name: 'app_open', is_pwa: window.matchMedia('(display-mode: standalone)').matches, reduced_motion: prefersReducedMotion() });
   }, []);
+
+  // Page view per route (the play overlay counts as its own page).
+  useEffect(() => {
+    trackPage(path);
+  }, [path]);
 
   if (path.startsWith('/lab')) {
     return (

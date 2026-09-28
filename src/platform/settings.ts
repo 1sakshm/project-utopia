@@ -56,7 +56,7 @@ export const defaultSettings: Settings = {
   breakReminderMin: 40,
   weeklyGoalMin: 0,
   graphics: 'auto',
-  analytics: false,
+  analytics: true, // anonymous usage stats (no cookies, no PII); can be turned off in Settings
   calibrationMs: 0,
 };
 
@@ -72,7 +72,16 @@ export const useSettings = create<SettingsStore>()(
       set: (patch) => set(patch),
       reset: () => set(defaultSettings),
     }),
-    { name: 'utopia.settings', version: 1 },
+    {
+      name: 'utopia.settings',
+      version: 2,
+      // v2: anonymous analytics became on-by-default (with an off switch). Earlier saves stored the old
+      // default (off) without the player ever choosing it, so they move to the new default once.
+      migrate: (persisted, version) => {
+        const st = (persisted ?? {}) as Partial<Settings>;
+        return (version < 2 ? { ...st, analytics: true } : st) as SettingsStore;
+      },
+    },
   ),
 );
 

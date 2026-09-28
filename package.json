@@ -20,6 +20,7 @@
     "gsap": "^3.15.0",
     "idb-keyval": "^6.3.0",
     "pixi.js": "^8.21.0",
+    "posthog-js": "^1.434.17",
     "postprocessing": "^6.39.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

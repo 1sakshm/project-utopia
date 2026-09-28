@@ -9,6 +9,7 @@ import { audioEngine } from '@/runtime/audio';
 import { navigate, useRoute } from '../router';
 import { LivePreview, PosterArt, formatScore } from '../components/Common';
 import { AbilityIcon } from '../components/Editorial';
+import { FeedbackButton } from '../components/Feedback';
 import { ABILITY_LABEL, RINGS, ringOf } from '@/platform/abilities';
 import { GameInfo } from '../components/GameInfo';
 import { Sheet } from '../components/Sheet';
@@ -520,6 +521,7 @@ function EndCard({ cycle, index, active, onNext }: { cycle: number; index: numbe
           ))}
         </div>
         <div className="end-actions">
+          <FeedbackButton from="end-card" />
           <button className="btn" onClick={() => route('/library')}>
             <IconGrid width={18} height={18} /> Browse library
           </button>
