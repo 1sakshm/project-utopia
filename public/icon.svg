@@ -6,8 +6,8 @@
       <stop offset="1" stop-color="#0b0d14"/>
     </radialGradient>
     <radialGradient id="halo" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#b99cff" stop-opacity=".45"/>
-      <stop offset=".45" stop-color="#b99cff" stop-opacity=".1"/>
+      <stop offset="0" stop-color="#b99cff" stop-opacity=".5"/>
+      <stop offset=".5" stop-color="#b99cff" stop-opacity=".12"/>
       <stop offset="1" stop-color="#b99cff" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="orb" cx="42%" cy="36%" r="66%">
@@ -22,22 +22,9 @@
       <stop offset="0" stop-color="#fff" stop-opacity=".9"/>
       <stop offset="1" stop-color="#fff" stop-opacity="0"/>
     </radialGradient>
-    <clipPath id="front"><rect x="0" y="256" width="512" height="256" transform="rotate(-16 256 256)"/></clipPath>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="230" fill="url(#halo)"/>
-  <!-- orbit (back half) -->
-  <ellipse cx="256" cy="256" rx="176" ry="50" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="5" transform="rotate(-16 256 256)"/>
-  <!-- planet -->
-  <circle cx="256" cy="256" r="108" fill="url(#orb)"/>
-  <circle cx="256" cy="256" r="108" fill="url(#spec)"/>
-  <!-- orbit (front half, over the planet) -->
-  <g clip-path="url(#front)">
-    <ellipse cx="256" cy="256" rx="176" ry="50" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="5" transform="rotate(-16 256 256)" filter="url(#glow)"/>
-    <ellipse cx="256" cy="256" rx="176" ry="50" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="4" transform="rotate(-16 256 256)"/>
-  </g>
-  <!-- moon -->
-  <circle cx="405" cy="186" r="15" fill="#fff4d0" filter="url(#glow)"/>
-  <circle cx="405" cy="186" r="11" fill="#fff8e6"/>
+  <circle cx="256" cy="256" r="236" fill="url(#halo)"/>
+  <circle cx="256" cy="256" r="140" fill="url(#orb)"/>
+  <circle cx="256" cy="256" r="140" fill="url(#spec)"/>
 </svg>
