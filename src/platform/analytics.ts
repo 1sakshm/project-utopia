@@ -88,7 +88,8 @@ export function track(e: AnalyticsEvent) {
 
 /** SPA page view (call on route change). */
 export function trackPage(path: string) {
-  send('$pageview', { $current_url: window.location.origin + path, path });
+  // Full URL incl. query string, so ?utm_source=... links show which community a visitor came from.
+  send('$pageview', { $current_url: window.location.href, path });
 }
 
 // Turning analytics off/on in Settings takes effect immediately.
