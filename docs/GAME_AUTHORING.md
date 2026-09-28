@@ -67,6 +67,7 @@ See `src/sdk/types.ts` for the full, commented interface. Most-used members:
 | `ctx.haptics.tick/success/error()`, `ctx.caption(text)`, `ctx.announce(text)` | Feedback & accessibility. Caption every meaningful sound; announce state changes. |
 | `ctx.trial({correct, rtMs?, level?})` | Record each trial (local stats). |
 | `ctx.storage.get/set` | Per-game persisted KV (e.g. calibration, unlocked items). |
+| `ctx.revive()` | Second chance. If your game ends because lives/shields/misses ran out (before its natural end), `await ctx.revive()` first: the platform pauses and may offer an optional ad or a Second Wind boost. If it resolves `true`, restore **one** life and carry on; recheck `alive` after the await. Offered at most once per session; always `false` in preview. |
 | `ctx.end({ score, levelReached, stats, message? })` | Finish the session → platform results screen. |
 
 `GameInstance`: `{ start(), destroy(), onPause?(), onResume?(), onSettings?(s) }`.

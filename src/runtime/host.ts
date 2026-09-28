@@ -19,6 +19,10 @@ export interface HostOptions {
   onError?: (err: unknown) => void;
   /** Voice games: ask the player (privacy notice) whether to answer by microphone or typing. */
   onVoiceConsent?: () => Promise<'mic' | 'typing'>;
+  /** Second chance offer (rewarded ad / Second Wind). Resolve true to grant a revive. */
+  onRevive?: () => Promise<boolean>;
+  /** Boosts for this run (e.g. slow-mo multiplies every response window by 1.5). */
+  boost?: { slowmo?: boolean };
   onTrial?: (t: { correct: boolean; rtMs?: number; level?: number }) => void;
 }
 
@@ -70,9 +74,16 @@ export function createGameHost(module: GameModule, container: HTMLElement, opts:
   let instance: GameInstance | null = null;
   let muted = preview ? !useSettings.getState().feedSound : false;
 
-  const settings = toGameSettings();
+  // Slow-mo boost stretches every response window for this run only.
+  const effective = (st = useSettings.getState()) => {
+    const g = toGameSettings(st);
+    if (opts.boost?.slowmo) g.timingMultiplier *= 1.5;
+    return g;
+  };
+  const settings = effective();
+  let reviveUsed = false;
   const unsubSettings = useSettings.subscribe((s) => {
-    Object.assign(settings, toGameSettings(s));
+    Object.assign(settings, effective(s));
     audioEngine.apply({ master: s.master, music: s.music, sfx: s.sfx, voice: s.voice, mono: s.mono });
     audioEngine.calibrationMs = s.calibrationMs;
     instance?.onSettings?.(settings);
@@ -207,6 +218,15 @@ export function createGameHost(module: GameModule, container: HTMLElement, opts:
     },
     trial: (t) => {
       if (!preview) opts.onTrial?.(t);
+    },
+    revive: async () => {
+      if (preview || reviveUsed || destroyed || !opts.onRevive) return false;
+      reviveUsed = true; // one offer per session, whether or not it is taken
+      host.pause();
+      const granted = await opts.onRevive().catch(() => false);
+      if (destroyed) return false;
+      host.resume();
+      return granted;
     },
     end: (summary) => {
       if (preview || destroyed) return;

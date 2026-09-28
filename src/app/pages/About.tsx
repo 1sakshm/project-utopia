@@ -22,7 +22,7 @@ const PRINCIPLES: Array<{ title: string; body: string }> = [
     title: 'Honest about the science',
     body: 'Every game is designed around an ability and inspired by real research. None of them diagnose, treat or measure you. There’s no “brain age”, just your own personal bests.',
   },
-  { title: 'Respectful of your attention', body: 'No ads, no currencies, no streak guilt, no notifications. The feed ends instead of scrolling forever, and gentle break reminders never interrupt a game.' },
+  { title: 'Respectful of your attention', body: 'No forced ads, nothing to buy, no streak guilt, no notifications. Rewards are optional and cosmetic. The feed ends instead of scrolling forever, and gentle break reminders never interrupt a game.' },
   { title: 'Accessible by default', body: 'High contrast, reduced motion, relaxed timing, captions for sounds, keyboard play and big touch targets, set once and applied to every game.' },
   { title: 'Yours', body: 'Progress lives on your device, with no account needed. We count anonymous usage (no names, emails or cookies) to see what helps, and you can switch that off in Settings. Voice games speak with Sarvam AI voices; if you choose to answer by microphone, your recording goes to Sarvam AI to be turned into text and isn’t stored by Utopia. Export or delete everything whenever you like.' },
 ];
@@ -44,7 +44,7 @@ export default function About() {
         <div className="ab-stats">
           <Stat value={GAMES.length} label="games, and growing" />
           <Stat value={RINGS.length} label="ability families" />
-          <Stat value={0} label="ads, ever" />
+          <Stat value={0} label="forced ads" />
         </div>
       </Hero>
 

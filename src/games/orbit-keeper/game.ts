@@ -182,6 +182,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   let alive = true;
   let running = false;
   let ended = false;
+  // Second chance: while the revive offer is pending the sim is frozen (no double game-over).
+  let reviving = false;
   const m: Moon = { theta: -Math.PI / 2, r: (R_MIN + R_MAX) / 2, vr: 0 };
   let omega = paramsFor(stair.level, ctx.settings.timingMultiplier).omega;
   let simTime = 0;
@@ -544,7 +546,28 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     if (preview && shields <= 0) shields = 3;
     drawShields();
     hud();
-    if (!preview && shields <= 0) void finish(false);
+    if (!preview && shields <= 0) void outOfShields();
+  }
+
+  async function outOfShields() {
+    if (ended || reviving) return;
+    if (simTime >= CYCLE_S) return void finish(false); // the cycle is over anyway: no second chance needed
+    reviving = true;
+    const granted = await ctx.revive();
+    reviving = false;
+    if (!alive || ended) return;
+    if (!granted) return void finish(false);
+    shields = 1;
+    invuln = 2.5;
+    acc = 0;
+    drawShields();
+    hud();
+    ctx.audio.success();
+    ctx.haptics.success();
+    ctx.caption('Second chance!');
+    ctx.announce('Second chance! One shield restored');
+    particles.burst(moon.x, moon.y, 36, { color: 0xffe7a8, speed: 220, life: 0.9, size: 14 });
+    floatText('Second chance!', moon.x, moon.y - 28, 0xffe7a8);
   }
 
   function nearMiss(it: Item) {
@@ -634,7 +657,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
           it.minD = Math.min(it.minD, d);
           if (d < it.size + MOON_R * 0.85 && invuln <= 0) {
             rockHit(it);
-            if (ended) return;
+            if (ended || reviving) return;
           }
         } else if (dphi <= -0.4) {
           it.state = 'safe';
@@ -659,13 +682,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function frame(dt: number) {
     const k = Math.min(dt, 100) / 1000;
     tAmb += k;
-    if (running) {
+    if (running && !reviving) {
       acc += k;
       let guard = 0;
       while (acc >= STEP && guard++ < 30) {
         acc -= STEP;
         physicsStep();
-        if (ended) break;
+        if (ended || reviving) break;
       }
       scheduleMusic();
     }

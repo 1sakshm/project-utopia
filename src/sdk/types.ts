@@ -274,6 +274,12 @@ export interface GameContext {
   caption(text: string): void;
   /** Record a trial (kept locally for stats; never uploaded). */
   trial(t: { correct: boolean; rtMs?: number; level?: number }): void;
+  /**
+   * Second chance: call when the run would end because lives/shields/misses ran out. The platform may offer the
+   * player a revive (rewarded ad or a Second Wind boost). Resolves true if granted: restore ONE life and continue.
+   * At most one revive per session; always false in preview.
+   */
+  revive(): Promise<boolean>;
   /** Finish the session → platform shows the results screen. Ignored in preview mode. */
   end(summary: SessionSummary): void;
 }

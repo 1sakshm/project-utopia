@@ -9,6 +9,10 @@ import { loadPosters } from '@/platform/posters';
 import { audioEngine } from '@/runtime/audio';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { IconFeed, IconGrid, IconRings, IconSettings } from './components/Icons';
+import AdHost from './components/AdHost';
+import { useEconomy } from '@/platform/economy';
+import { SKINS, THEMES } from '@/platform/shop';
+import '@/styles/rewards.css';
 
 const Library = lazy(() => import('./pages/Library'));
 const GameDetail = lazy(() => import('./pages/GameDetail'));
@@ -16,6 +20,7 @@ const Progress = lazy(() => import('./pages/Progress'));
 const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Lab = lazy(() => import('./pages/Lab'));
+const Shop = lazy(() => import('./pages/Shop'));
 
 const TABS = [
   { path: '/', label: 'Feed', Icon: IconFeed },
@@ -29,6 +34,7 @@ export default function App() {
   const search = useRoute((s) => s.search);
   const settings = useSettings();
   const announce = usePlayUi((s) => s.announce);
+  const equipped = useEconomy((s) => s.equipped);
 
   // Reflect settings globally (CSS + audio).
   useEffect(() => {
@@ -40,6 +46,20 @@ export default function App() {
     audioEngine.apply({ master: settings.master, music: settings.music, sfx: settings.sfx, voice: settings.voice, mono: settings.mono });
     audioEngine.calibrationMs = settings.calibrationMs;
   }, [settings]);
+
+  // Equipped cosmetics: orb skin + color theme (high contrast always wins over the theme accent).
+  useEffect(() => {
+    const root = document.documentElement.style;
+    const skin = SKINS.find((k) => k.id === equipped.skin) ?? SKINS[0];
+    const theme = THEMES.find((t) => t.id === equipped.theme) ?? THEMES[0];
+    root.setProperty('--skin', skin.gradient);
+    root.setProperty('--skin-glow', skin.glow);
+    root.setProperty('--t1', theme.a1);
+    root.setProperty('--t2', theme.a2);
+    root.setProperty('--t3', theme.a3);
+    if (settings.highContrast || theme.id === 'theme-aurora') root.removeProperty('--accent');
+    else root.setProperty('--accent', theme.accent);
+  }, [equipped, settings.highContrast]);
 
   useEffect(() => {
     void loadPosters(GAMES.map((g) => g.manifest.id));
@@ -67,6 +87,7 @@ export default function App() {
   else if (path === '/progress') page = <Progress />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/about') page = <About />;
+  else if (path === '/shop') page = <Shop />;
   else if (detail) page = <GameDetail id={detail.id} />;
   else if (!onFeed) page = <NotFound />;
 
@@ -107,6 +128,7 @@ export default function App() {
         )}
       </main>
       {play && <PlayOverlay key={play.id + search} gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} />}
+      <AdHost />
       <BreakReminder paused={!!play} />
       <UpdateToast blocked={!!play} />
       <div className="sr-only" aria-live="polite" role="status">

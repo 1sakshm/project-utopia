@@ -327,6 +327,20 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       hud();
       if (!preview && (lives <= 0 || trials >= TRIALS)) {
         await ctx.wait(1000);
+        if (!alive) return;
+        if (lives <= 0 && trials < TRIALS && (await ctx.revive())) {
+          if (!alive) return;
+          lives = 1;
+          hud();
+          status.text = 'SECOND CHANCE';
+          ctx.audio.success();
+          ctx.haptics.success();
+          ctx.caption('Second chance!');
+          ctx.announce('Second chance! One life restored');
+          particles.burst(orbX, orbY, 40, { color: hex(pal.highlight), speed: 220, life: 0.9 });
+          await ctx.wait(1000);
+          continue;
+        }
         ctx.end({
           score,
           levelReached: longest,

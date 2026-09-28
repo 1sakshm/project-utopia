@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useSettings, prefersReducedMotion, type Settings as S } from '@/platform/settings';
 import { useProgress } from '@/platform/progress';
+import { useEconomy, AD_DAILY_CAP } from '@/platform/economy';
 import { track } from '@/platform/analytics';
 import { audioEngine } from '@/runtime/audio';
 import { navigate } from '../router';
@@ -15,6 +16,7 @@ const GROUPS = [
   { id: 'audio', label: 'Audio & haptics', title: 'Sound and touch' },
   { id: 'gameplay', label: 'Gameplay', title: 'Play at your pace' },
   { id: 'voice', label: 'Voice', title: 'Speak and listen' },
+  { id: 'rewards', label: 'Rewards', title: 'Orbs, boosts and ads' },
   { id: 'wellbeing', label: 'Wellbeing', title: 'Look after yourself' },
   { id: 'data', label: 'Data & privacy', title: 'Your data, your call' },
 ] as const;
@@ -140,6 +142,7 @@ export default function Settings() {
   const root = useRef<HTMLDivElement>(null);
   const s = useSettings();
   const clearAll = useProgress((x) => x.clearAll);
+  const adsLeft = useEconomy((x) => x.adsLeft());
   const [canInstall, setCanInstall] = useState(!!deferredInstall);
   const [confirmDelete, setConfirmDelete] = useState(false);
   useReveal(root);
@@ -154,6 +157,7 @@ export default function Settings() {
       exportedAt: new Date().toISOString(),
       settings: Object.fromEntries(Object.entries(useSettings.getState()).filter(([, v]) => typeof v !== 'function')),
       progress: useProgress.getState().games,
+      economy: Object.fromEntries(Object.entries(useEconomy.getState()).filter(([, v]) => typeof v !== 'function')),
       history: useProgress.getState().history,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -308,6 +312,18 @@ export default function Settings() {
         />
       </Group>
 
+      <Group id="rewards">
+        <Toggle k="showBoostPicker" label="Offer boosts before a game" desc="Slow-mo and Second Wind, paid with orbs or an optional ad. Boosted runs are scored separately." />
+        <ActionRow
+          label="Ads are optional"
+          desc={`Only when you choose one, for a reward. Never forced, never needed to play. ${AD_DAILY_CAP - adsLeft} of ${AD_DAILY_CAP} watched today.`}
+        >
+          <button className="btn" onClick={() => navigate('/shop')}>
+            Open shop
+          </button>
+        </ActionRow>
+      </Group>
+
       <Group id="wellbeing">
         <Segmented
           k="breakReminderMin"
@@ -338,7 +354,7 @@ export default function Settings() {
             Export JSON
           </button>
         </ActionRow>
-        <ActionRow label="Delete my data" desc="Removes all progress and history on this device">
+        <ActionRow label="Delete my data" desc="Removes all progress, history, orbs and unlocks on this device">
           {confirmDelete ? (
             <span className="row">
               <button className="btn" onClick={() => setConfirmDelete(false)}>
@@ -348,6 +364,7 @@ export default function Settings() {
                 className="btn btn-danger"
                 onClick={() => {
                   clearAll();
+                  useEconomy.getState().reset();
                   setConfirmDelete(false);
                 }}
               >

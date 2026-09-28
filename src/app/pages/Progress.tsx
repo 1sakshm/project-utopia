@@ -1,4 +1,4 @@
-import { useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { RINGS, ABILITY_RING, type RingId } from '@/platform/abilities';
 import { useProgress } from '@/platform/progress';
@@ -6,6 +6,9 @@ import { useSettings } from '@/platform/settings';
 import { navigate } from '../router';
 import { formatScore } from '../components/Common';
 import { AbilityGlyph, CountUp, Hero, SectionHead, d, useReveal } from '../components/Editorial';
+import { useEconomy, levelProgress, questsFor, utcDay } from '@/platform/economy';
+import { track } from '@/platform/analytics';
+import Wallet from '../components/Wallet';
 import '@/styles/progress.css';
 
 /** Sparkline that draws itself when its [data-reveal] ancestor becomes visible. */
@@ -41,6 +44,69 @@ function Ring({ value, color, size = 96 }: { value: number; color: string; size?
       {/* no arc at all when empty: a zero-length round-capped stroke still renders as a dot */}
       {v > 0.005 && <circle cx={size / 2} cy={size / 2} r={r} className="pr-ring-arc" transform={`rotate(-90 ${size / 2} ${size / 2})`} />}
     </svg>
+  );
+}
+
+/** Level, XP, orbs and today's quests. Quests reset daily; missing a day costs nothing. */
+function ProfileCard() {
+  const xp = useEconomy((s) => s.xp);
+  const quests = useEconomy((s) => s.quests);
+  const lp = levelProgress(xp);
+  const list = quests.day === utcDay() ? quests.list : questsFor(utcDay());
+  useEffect(() => void useEconomy.getState().todayQuests(), []);
+  return (
+    <div className="ed-card pf-card" data-reveal>
+      <div className="pf-top">
+        <div className="pf-orb-wrap">
+          <Ring value={lp.frac} color="var(--accent)" size={84} />
+          <span className="pf-orb" aria-hidden />
+        </div>
+        <div className="pf-level">
+          <p className="ab-eyebrow">Level</p>
+          <p className="display pf-level-n">{lp.level}</p>
+          <small>
+            {lp.into} / {lp.span} XP to level {lp.level + 1}
+          </small>
+        </div>
+        <Wallet className="pf-wallet" />
+      </div>
+      <div className="pf-quests">
+        <p className="ab-eyebrow">Today’s quests</p>
+        <ul>
+          {list.map((q) => {
+            const done = q.progress >= q.target;
+            return (
+              <li key={q.id} className={`pf-quest ${q.claimed ? 'is-claimed' : done ? 'is-done' : ''}`}>
+                <span className="pf-q-text">
+                  <b>{q.title}</b>
+                  <span className="pf-q-bar" aria-hidden>
+                    <i style={{ width: `${(q.progress / q.target) * 100}%` }} />
+                  </span>
+                </span>
+                {q.claimed ? (
+                  <span className="pf-q-state">Claimed ✓</span>
+                ) : done ? (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      const got = useEconomy.getState().claimQuest(q.id);
+                      if (got) track({ name: 'reward', source: 'quest', orbs: got });
+                    }}
+                  >
+                    Claim <i className="coin sm" aria-hidden /> {q.reward}
+                  </button>
+                ) : (
+                  <span className="pf-q-state">
+                    {q.progress}/{q.target} · <i className="coin sm" aria-hidden /> {q.reward}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="fine">New quests every day. No streaks to lose.</p>
+      </div>
+    </div>
   );
 }
 
@@ -121,6 +187,10 @@ export default function Progress() {
           </div>
         </div>
       </Hero>
+
+      <section className="ab-section is-tight">
+        <ProfileCard />
+      </section>
 
       {goal > 0 && (
         <section className="ab-section is-tight">

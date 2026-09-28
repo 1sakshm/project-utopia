@@ -97,7 +97,8 @@
   stroke-dasharray: 0 999;
   transition: stroke-dasharray 1.6s var(--ease) 0.25s;
 }
-.pr-ring-card.is-in .pr-ring-arc {
+.pr-ring-card.is-in .pr-ring-arc,
+.pf-card.is-in .pr-ring-arc {
   stroke-dasharray: var(--dash);
 }
 .pr-ring-glyph {

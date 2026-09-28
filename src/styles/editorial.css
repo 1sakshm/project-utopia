@@ -12,9 +12,9 @@
 .ab-hero {
   --mx: 0;
   --my: 0;
-  --a1: #8b6cff;
-  --a2: #ff8fb1;
-  --a3: #6fe3ff;
+  --a1: var(--t1, #8b6cff);
+  --a2: var(--t2, #ff8fb1);
+  --a3: var(--t3, #6fe3ff);
   position: relative;
   min-height: min(92vh, 860px);
   display: flex;

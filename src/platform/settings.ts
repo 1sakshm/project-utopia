@@ -33,6 +33,8 @@ export interface Settings {
   voiceGender: 'female' | 'male';
   /** How voice games take answers: ask once, microphone (Sarvam speech-to-text), or typing. */
   voiceInput: 'ask' | 'mic' | 'typing';
+  /** Offer optional boosts (slow-mo, second wind) before a game starts. */
+  showBoostPicker: boolean;
   calibrationMs: number;
 }
 
@@ -65,6 +67,7 @@ export const defaultSettings: Settings = {
   voiceLang: 'en-IN',
   voiceGender: 'female',
   voiceInput: 'ask',
+  showBoostPicker: true,
   calibrationMs: 0,
 };
 

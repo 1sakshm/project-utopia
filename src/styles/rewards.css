@@ -1,0 +1,484 @@
+/* ================= Rewards: ads, wallet, boosts, revive, results rewards ================= */
+
+/* Mock ad player */
+.ad-host {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 4, 10, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fade 0.2s ease-out;
+}
+.ad-card {
+  width: min(420px, 100%);
+  border-radius: 28px;
+  overflow: hidden;
+  background: #10121f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+.ad-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+.ad-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ad-skip {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.ad-stage {
+  position: relative;
+  height: 260px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  background:
+    radial-gradient(60% 60% at 30% 30%, color-mix(in srgb, var(--t1, #8b6cff) 55%, transparent), transparent 70%),
+    radial-gradient(60% 60% at 75% 70%, color-mix(in srgb, var(--t2, #ff8fb1) 45%, transparent), transparent 70%),
+    #0b0d18;
+  text-align: center;
+  overflow: hidden;
+}
+.ad-orb {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--skin, radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 42%, #6c5cff 78%, #1b1640));
+  box-shadow: 0 0 50px var(--skin-glow, rgba(185, 156, 255, 0.7));
+  animation: ab-breathe 3s ease-in-out infinite;
+}
+.ad-brand {
+  margin: 10px 0 0;
+  font-size: 1.8rem;
+}
+.ad-sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+.ad-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+.ad-ring {
+  --p: 0;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--accent) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.1) 0);
+  transition: background 1s linear;
+}
+.ad-ring span {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #10121f;
+  font-weight: 800;
+}
+.ad-reward {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ad-reward small {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.ad-reward b {
+  font-size: 0.95rem;
+}
+.ad-foot .btn[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Wallet pill (orb + count) */
+.wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 12, 22, 0.55);
+  backdrop-filter: blur(10px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-decoration: none;
+}
+.wallet .coin,
+.coin {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--skin, radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 42%, #6c5cff 78%, #1b1640));
+  box-shadow: 0 0 12px var(--skin-glow, rgba(185, 156, 255, 0.7));
+  flex: none;
+}
+.coin.sm {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 8px var(--skin-glow, rgba(185, 156, 255, 0.7));
+}
+
+/* Boost picker (pre-game) */
+.boosts {
+  margin: 4px 0 18px;
+  text-align: left;
+}
+.boosts-title {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.boost-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.boost {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 12px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s var(--ease);
+}
+.boost:active {
+  transform: scale(0.97);
+}
+.boost b {
+  font-size: 0.95rem;
+}
+.boost small {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-weight: 700;
+}
+.boost[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.boost[aria-pressed='true']::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-weight: 900;
+  color: var(--accent);
+}
+.boost .boost-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--text-2);
+}
+.boost-note {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+
+/* Revive sheet */
+.revive h2 {
+  margin-bottom: 6px;
+}
+.revive .actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.revive-orb {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: var(--skin, radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 42%, #6c5cff 78%, #1b1640));
+  box-shadow: 0 0 40px var(--skin-glow, rgba(185, 156, 255, 0.7));
+  animation: ab-breathe 2.4s ease-in-out infinite;
+}
+
+/* Results: rewards row */
+.rewards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.reward-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 800;
+  font-size: 0.88rem;
+  animation: pop 0.6s var(--ease) both;
+}
+.reward-chip.levelup {
+  color: #ffe08a;
+  border-color: rgba(255, 224, 138, 0.5);
+  background: rgba(255, 224, 138, 0.12);
+}
+.reward-chip.quest {
+  color: #8dffc4;
+  border-color: rgba(141, 255, 196, 0.45);
+  background: rgba(141, 255, 196, 0.1);
+}
+.boosted-pill {
+  display: inline-block;
+  margin: 2px 0 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffcf7a;
+  border: 1px solid rgba(255, 207, 122, 0.45);
+}
+.double-btn {
+  width: 100%;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+}
+
+/* Profile card (Progress) */
+.pf-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px 20px 18px;
+}
+.pf-card .fine {
+  margin: 10px 0 0;
+}
+.pf-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.pf-orb-wrap {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: none;
+}
+.pf-orb {
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  background: var(--skin, radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 42%, #6c5cff 78%, #1b1640));
+  box-shadow: 0 0 26px var(--skin-glow, rgba(185, 156, 255, 0.7));
+  animation: ab-breathe 3.2s ease-in-out infinite;
+}
+.pf-level {
+  flex: 1;
+  min-width: 140px;
+}
+.pf-level p {
+  margin: 0;
+}
+.pf-level-n {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+.pf-level small {
+  color: var(--text-3);
+  font-weight: 700;
+}
+.pf-quests ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.pf-quest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.pf-quest.is-done {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.pf-quest.is-claimed {
+  opacity: 0.6;
+}
+.pf-q-text {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.pf-q-text b {
+  font-size: 0.92rem;
+}
+.pf-q-bar {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.pf-q-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.6s var(--ease);
+}
+.pf-q-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.pf-quest .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Shop */
+.shop-wallet {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.shop-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+  gap: 12px;
+}
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 20px 14px 16px;
+}
+.shop-item small {
+  color: var(--text-3);
+  margin-bottom: 10px;
+  min-height: 2.4em;
+}
+.shop-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+.shop-swatch {
+  width: 72px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background:
+    radial-gradient(70% 90% at 20% 20%, var(--s1), transparent 70%),
+    radial-gradient(70% 90% at 80% 30%, var(--s2), transparent 70%),
+    radial-gradient(70% 90% at 50% 100%, var(--s3), transparent 70%),
+    #0b0d18;
+}
+.shop-pack {
+  font-size: 2.2rem;
+  line-height: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+}
+.shop-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: auto;
+}
+.shop-actions .btn,
+.shop-item > .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: auto;
+}
+.shop-actions .btn,
+.shop-item > .btn {
+  min-height: 42px;
+  padding: 0 14px;
+  font-size: 0.9rem;
+}
+.shop-sample {
+  font-size: 0.78rem !important;
+}
+.shop-tag {
+  margin-top: auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.shop-fine {
+  margin-top: 14px;
+  text-align: center;
+}

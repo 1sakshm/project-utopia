@@ -276,6 +276,18 @@ export default function create(ctx: GameContext): GameInstance {
       if (ok && trials <= 2 && stair.level === before && before < 3) stair.set(before + 1);
       if (preview && stair.level > 4) stair.set(3);
       if (preview && misses >= MAX_MISSES) misses = 0;
+      if (!preview && misses >= MAX_MISSES && trials < TRIALS && (await ctx.revive())) {
+        if (!alive) return;
+        misses = MAX_MISSES - 1;
+        hud(def.span);
+        ctx.audio.success();
+        ctx.haptics.success();
+        ctx.caption('Second chance!');
+        ctx.announce('Second chance! One lantern life restored');
+        burstRef.current?.burst([0, 0.6, 0], 40, { color: '#ffe3a3', speed: 1.6, life: 1.6, gravity: -0.8 });
+        await ctx.wait(700);
+      }
+      if (!alive) return;
       if (!preview && (misses >= MAX_MISSES || trials >= TRIALS)) {
         await ctx.wait(700);
         const acc = taps ? Math.round((goodTaps / taps) * 100) : 0;

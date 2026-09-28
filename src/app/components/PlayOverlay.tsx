@@ -13,14 +13,23 @@ import { navigate } from '../router';
 import { PosterArt, formatScore } from './Common';
 import { IconClose, IconPause, IconPlay, IconRestart, IconNext } from './Icons';
 import { today } from '../pages/Feed';
+import { CountUp } from './Editorial';
+import Wallet from './Wallet';
+import { useEconomy, type SessionRewards } from '@/platform/economy';
+import { showRewardedAd } from '@/platform/ads';
+import { BOOST_ORB_PRICE } from '@/platform/shop';
+import { ABILITY_RING } from '@/platform/abilities';
 
-type Phase = 'loading' | 'howto' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
+type Phase = 'loading' | 'boost' | 'howto' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
+type BoostKind = 'slowmo' | 'secondWind';
 
 interface ResultInfo {
   summary: SessionSummary;
   isPb: boolean;
   prevBest: number;
   statPbs: Record<string, boolean>;
+  assisted: boolean;
+  rewards: SessionRewards;
 }
 
 export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: boolean }) {
@@ -41,6 +50,14 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [voiceAsk, setVoiceAsk] = useState<null | ((c: 'mic' | 'typing') => void)>(null);
+  const [reviveAsk, setReviveAsk] = useState<null | ((granted: boolean) => void)>(null);
+  // Boosts chosen before the run (picker shows once per opening, before the host is created).
+  const [boosts, setBoosts] = useState<null | Record<BoostKind, boolean>>(() =>
+    useSettings.getState().showBoostPicker && mod?.manifest.showScore !== false && useProgress.getState().get(gameId).tutorialDone ? null : { slowmo: false, secondWind: false },
+  );
+  const assisted = useRef(false);
+  const windLoaded = useRef(false);
+  const reviveOpen = useRef(false);
   const say = usePlayUi((s) => s.say);
 
   const go = useCallback((p: Phase) => {
@@ -75,14 +92,42 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     setHud({});
     setResult(null);
     setError(null);
+    if (!boosts) {
+      go('boost');
+      return;
+    }
     go('loading');
+    assisted.current = boosts.slowmo;
+    windLoaded.current = boosts.secondWind;
     const t0 = performance.now();
     const seed = daily ? dailySeed(gameId) : (Math.random() * 2 ** 31) | 0;
+    const onRevive = () => {
+      if (windLoaded.current) {
+        // A pre-loaded Second Wind kicks in automatically.
+        windLoaded.current = false;
+        assisted.current = true;
+        track({ name: 'revive', game_id: gameId, via: 'second-wind' });
+        say('Second Wind! One more life.');
+        setCaption('Second Wind ✦ one more life');
+        return Promise.resolve(true);
+      }
+      return new Promise<boolean>((resolve) => {
+        reviveOpen.current = true;
+        setReviveAsk(() => (granted: boolean) => {
+          reviveOpen.current = false;
+          setReviveAsk(null);
+          if (granted) assisted.current = true;
+          resolve(granted);
+        });
+      });
+    };
     const h = createGameHost(mod, box.current, {
       mode: 'play',
       variant: daily ? 'daily' : 'normal',
       seed,
       startLevel: startLevelFor(gameId),
+      boost: { slowmo: boosts.slowmo },
+      onRevive,
       onHud: (p) => setHud((prev) => (p ? { ...prev, ...p } : {})),
       onCaption: (t) => setCaption(t),
       onAnnounce: (t) => say(t),
@@ -103,6 +148,8 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       },
     });
     host.current = h;
+    // DEV-only hooks for end-to-end tests (end a run / offer a second chance without playing it out).
+    if (import.meta.env.DEV) (window as unknown as { __utopiaPlay?: object }).__utopiaPlay = { end: (sm: SessionSummary) => finish(sm, h), revive: onRevive };
     h.ready.then(() => {
       if (host.current !== h) return;
       setReady(true);
@@ -116,7 +163,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       h.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mod, runId, daily]);
+  }, [mod, runId, daily, boosts]);
 
   function begin(h = host.current) {
     if (!h) return;
@@ -127,6 +174,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
 
   const pause = useCallback(() => {
     if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
+    if (reviveOpen.current) return; // the second-chance sheet already holds the game paused
     host.current?.pause();
     go('paused');
     track({ name: 'game_action', game_id: gameId, action: 'pause' });
@@ -198,11 +246,13 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     const prog = store.get(gameId);
     const timing = useSettings.getState().timing;
     const relaxed = timing !== 'standard';
-    const prevBest = relaxed ? prog.bestRelaxed : prog.best;
+    // Boosted/revived runs are tracked separately and never overwrite normal personal bests.
+    const wasAssisted = assisted.current;
+    const prevBest = wasAssisted ? (prog.bestAssisted ?? 0) : relaxed ? prog.bestRelaxed : prog.best;
     const isPb = m.showScore !== false && s.score > prevBest && s.score > 0;
     const statPbs: Record<string, boolean> = {};
     const bestStats = { ...prog.bestStats };
-    for (const def of m.results) {
+    for (const def of wasAssisted ? [] : m.results) {
       const v = s.stats[def.key];
       if (v === undefined || !def.better) continue;
       const old = bestStats[def.key];
@@ -223,9 +273,10 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       lastPlayed: Date.now(),
       earlyExits: 0,
     };
-    if (relaxed) patch.bestRelaxed = Math.max(prog.bestRelaxed, s.score);
+    if (wasAssisted) patch.bestAssisted = Math.max(prog.bestAssisted ?? 0, s.score);
+    else if (relaxed) patch.bestRelaxed = Math.max(prog.bestRelaxed, s.score);
     else patch.best = Math.max(prog.best, s.score);
-    if (daily) {
+    if (daily && !wasAssisted) {
       const d = today();
       const cur = prog.dailyBest?.day === d ? prog.dailyBest.score : 0;
       patch.dailyBest = { day: d, score: Math.max(cur, s.score) };
@@ -241,9 +292,21 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       mode: daily ? 'daily' : 'normal',
       timing,
       stats: s.stats,
+      assisted: wasAssisted || undefined,
     });
     track({ name: 'game_session_end', game_id: gameId, score: s.score, level_reached: s.levelReached, duration_ms: ms, is_pb: isPb });
-    setResult({ summary: s, isPb, prevBest, statPbs });
+    const rewards = useEconomy.getState().applySession({
+      gameId,
+      ring: ABILITY_RING[m.abilities.primary],
+      voice: m.input.requiresAudio,
+      levelReached: s.levelReached,
+      completed: true,
+      isPb: isPb && !wasAssisted,
+      assisted: wasAssisted,
+      ms,
+    });
+    track({ name: 'reward', source: 'session', orbs: rewards.orbs });
+    setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards });
     go('results');
     say(`Session complete. ${m.showScore !== false ? `Score ${s.score}.` : ''} ${isPb ? 'New personal best!' : ''}`);
     if (isPb) audioEngine.uiPlay();
@@ -302,6 +365,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     track({ name: 'game_action', game_id: gameId, action: kind });
     setConfirmExit(false);
     setShowHowTo(false);
+    setBoosts({ slowmo: false, secondWind: false }); // boosts last one run
     setRunId((r) => r + 1);
   }
 
@@ -353,6 +417,14 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
           <div className="loader" aria-label="Loading" />
         </div>
       )}
+
+      {phase === 'boost' && (
+        <div className="play-center">
+          <BoostPicker title={m.title} gameId={gameId} onStart={(b) => setBoosts(b)} />
+        </div>
+      )}
+
+      {reviveAsk && <ReviveSheet gameId={gameId} done={reviveAsk} />}
 
       {phase === 'howto' && (
         <div className="play-center">
@@ -572,16 +644,17 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
   const delta = s.score - r.prevBest;
   const line =
     s.message ??
-    (r.isPb ? 'A new personal best. Lovely.' : delta > -20 && r.prevBest > 0 ? 'Right on the edge of your best.' : 'Every round sharpens the next.');
+    (r.isPb ? (r.assisted ? 'A new boosted best. Nice run.' : 'A new personal best. Lovely.') : delta > -20 && r.prevBest > 0 ? 'Right on the edge of your best.' : 'Every round sharpens the next.');
   return (
     <div className="glass-card results">
       <p className="eyebrow">{m.title}</p>
       {showScore ? (
         <>
+          {r.assisted && <span className="boosted-pill">Boosted run · scored separately</span>}
           <div className={`results-score ${r.isPb ? 'is-pb' : ''}`}>{formatScore(s.score)}</div>
           <p className="results-unit">{m.scoreLabel}</p>
-          {r.isPb && <p className="pb-badge">✦ New personal best</p>}
-          {!r.isPb && r.prevBest > 0 && <p className="muted">Your best: {formatScore(r.prevBest)}</p>}
+          {r.isPb && <p className="pb-badge">✦ New {r.assisted ? 'boosted ' : ''}best</p>}
+          {!r.isPb && r.prevBest > 0 && <p className="muted">Your {r.assisted ? 'boosted ' : ''}best: {formatScore(r.prevBest)}</p>}
         </>
       ) : (
         <h2 className="display results-calm">Welcome back to stillness.</h2>
@@ -603,6 +676,7 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
         )}
       </div>
       <p className="results-line">{line}</p>
+      <RewardsRow rewards={r.rewards} />
       <div className="results-actions">
         <button className="btn btn-primary btn-lg" onClick={onAgain} autoFocus>
           <IconRestart width={18} height={18} /> Play again
@@ -617,5 +691,205 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
         </div>
       </div>
     </div>
+  );
+}
+
+const BOOST_INFO: Record<BoostKind, { name: string; blurb: string }> = {
+  slowmo: { name: 'Slow-mo', blurb: '50% more time on every timer' },
+  secondWind: { name: 'Second Wind', blurb: 'One free second chance' },
+};
+type BoostVia = 'inventory' | 'orbs' | 'ad';
+
+/** Optional pre-run boosts. Never required: "Play" is always one tap. */
+function BoostPicker({ title, gameId, onStart }: { title: string; gameId: string; onStart: (b: Record<BoostKind, boolean>) => void }) {
+  const eco = useEconomy();
+  const setSettings = useSettings((s) => s.set);
+  const [sel, setSel] = useState<Record<BoostKind, BoostVia | null>>({ slowmo: null, secondWind: null });
+  const [busy, setBusy] = useState(false);
+  const kinds: BoostKind[] = ['slowmo', 'secondWind'];
+
+  const reserved = (except: BoostKind) => kinds.reduce((n, k) => (k !== except && sel[k] === 'orbs' ? n + BOOST_ORB_PRICE[k] : n), 0);
+  const viaFor = (k: BoostKind): BoostVia | null =>
+    eco.boosts[k] > 0 ? 'inventory' : eco.orbs - reserved(k) >= BOOST_ORB_PRICE[k] ? 'orbs' : eco.canWatchAd() ? 'ad' : null;
+
+  async function toggle(k: BoostKind) {
+    if (busy) return;
+    if (sel[k]) {
+      if (sel[k] !== 'ad') setSel((s) => ({ ...s, [k]: null })); // an ad-earned boost stays on
+      return;
+    }
+    const via = viaFor(k);
+    if (!via) return;
+    if (via === 'ad') {
+      setBusy(true);
+      const r = await showRewardedAd('boost');
+      setBusy(false);
+      if (r !== 'rewarded') return;
+    }
+    setSel((s) => ({ ...s, [k]: via }));
+  }
+
+  function start() {
+    const out = { slowmo: false, secondWind: false };
+    const e = useEconomy.getState();
+    for (const k of kinds) {
+      const via = sel[k];
+      if (!via) continue;
+      const ok = via === 'inventory' ? e.useBoost(k) : via === 'orbs' ? e.spend(BOOST_ORB_PRICE[k]) : true;
+      if (ok) {
+        out[k] = true;
+        track({ name: 'boost_used', kind: k, via, game_id: gameId });
+      }
+    }
+    onStart(out);
+  }
+
+  const any = kinds.some((k) => sel[k]);
+  return (
+    <div className="glass-card howto boost-card">
+      <p className="eyebrow">Ready?</p>
+      <h2 className="display">{title}</h2>
+      <div className="boosts">
+        <p className="boosts-title">Optional boosts</p>
+        <div className="boost-row">
+          {kinds.map((k) => {
+            const chosen = sel[k];
+            const via = chosen ?? viaFor(k);
+            return (
+              <button key={k} className="boost" aria-pressed={!!chosen} disabled={busy || (!chosen && !via)} onClick={() => void toggle(k)}>
+                <b>{BOOST_INFO[k].name}</b>
+                <small>{BOOST_INFO[k].blurb}</small>
+                <span className="boost-cost">
+                  {chosen === 'ad' ? (
+                    'Earned ✓'
+                  ) : via === 'inventory' ? (
+                    `${eco.boosts[k]} owned`
+                  ) : via === 'orbs' ? (
+                    <>
+                      <i className="coin sm" aria-hidden /> {BOOST_ORB_PRICE[k]} orbs
+                    </>
+                  ) : via === 'ad' ? (
+                    '▶ Watch a short ad'
+                  ) : (
+                    'Not enough orbs'
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="boost-note">Boosted runs earn half orbs and are scored separately from your bests.</p>
+      </div>
+      <button className="btn btn-primary btn-lg" onClick={start} disabled={busy} autoFocus>
+        {any ? 'Play boosted' : 'Play'}
+      </button>
+      <button
+        className="btn btn-ghost"
+        onClick={() => {
+          setSettings({ showBoostPicker: false });
+          onStart({ slowmo: false, secondWind: false });
+        }}
+      >
+        Don’t offer boosts
+      </button>
+    </div>
+  );
+}
+
+/** Second chance when a run would end. Always optional; "No thanks" is focused by default. */
+function ReviveSheet({ gameId, done }: { gameId: string; done: (granted: boolean) => void }) {
+  const winds = useEconomy((s) => s.boosts.secondWind);
+  const canAd = useEconomy((s) => s.canWatchAd());
+  const [busy, setBusy] = useState(false);
+  async function watch() {
+    setBusy(true);
+    const r = await showRewardedAd('second-chance');
+    setBusy(false);
+    if (r === 'rewarded') {
+      track({ name: 'revive', game_id: gameId, via: 'ad' });
+      done(true);
+    }
+  }
+  function wind() {
+    if (!useEconomy.getState().useBoost('secondWind')) return;
+    track({ name: 'revive', game_id: gameId, via: 'second-wind' });
+    track({ name: 'boost_used', kind: 'secondWind', via: 'inventory', game_id: gameId });
+    done(true);
+  }
+  return (
+    <div className="play-center play-dim">
+      <div className="glass-card small revive" role="dialog" aria-modal="true" aria-labelledby="rv-title">
+        <div className="revive-orb" aria-hidden />
+        <h2 className="display" id="rv-title">
+          Keep going?
+        </h2>
+        <p className="muted">Get one more life and carry on. Boosted runs are scored separately.</p>
+        <div className="actions">
+          {canAd && (
+            <button className="btn btn-primary" onClick={() => void watch()} disabled={busy}>
+              ▶ Watch a short ad
+            </button>
+          )}
+          {winds > 0 && (
+            <button className="btn" onClick={wind} disabled={busy}>
+              Use Second Wind ({winds})
+            </button>
+          )}
+          <button
+            className="btn btn-ghost"
+            autoFocus
+            disabled={busy}
+            onClick={() => {
+              track({ name: 'revive', game_id: gameId, via: 'declined' });
+              done(false);
+            }}
+          >
+            No thanks, end the run
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Orbs + XP earned, level-ups, finished quests, and an optional "double it" ad. */
+function RewardsRow({ rewards }: { rewards: SessionRewards }) {
+  const [doubled, setDoubled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const canAd = useEconomy((s) => s.canWatchAd());
+  const orbs = doubled ? rewards.orbs * 2 : rewards.orbs;
+  async function double() {
+    setBusy(true);
+    const r = await showRewardedAd('double-orbs');
+    setBusy(false);
+    if (r !== 'rewarded') return;
+    useEconomy.getState().award(rewards.orbs);
+    track({ name: 'reward', source: 'double', orbs: rewards.orbs });
+    setDoubled(true);
+  }
+  return (
+    <>
+      <div className="rewards" aria-label="Rewards">
+        <span className="reward-chip">
+          <i className="coin sm" aria-hidden /> +<CountUp value={orbs} duration={700} /> orbs
+        </span>
+        <span className="reward-chip">
+          +<CountUp value={rewards.xp} duration={700} /> XP
+        </span>
+        {rewards.levelAfter > rewards.levelBefore && <span className="reward-chip levelup">✦ Level {rewards.levelAfter}</span>}
+        {rewards.questsCompleted.map((q) => (
+          <span key={q.id} className="reward-chip quest">
+            ✓ {q.title}
+          </span>
+        ))}
+        <Wallet />
+      </div>
+      {!doubled && canAd && rewards.orbs > 0 && (
+        <button className="btn double-btn" onClick={() => void double()} disabled={busy}>
+          ▶ Double your orbs with a short ad (+{rewards.orbs})
+        </button>
+      )}
+      {rewards.questsCompleted.length > 0 && <p className="fine">Claim quest rewards in Progress.</p>}
+    </>
   );
 }

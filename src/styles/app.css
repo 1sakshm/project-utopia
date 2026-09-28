@@ -117,8 +117,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #ffe9b0, #ff9fb8 40%, #6c5cff 75%, #1b1640);
-  box-shadow: 0 0 22px rgba(185, 156, 255, 0.6);
+  background: var(--skin, radial-gradient(circle at 40% 35%, #ffe9b0, #ff9fb8 40%, #6c5cff 75%, #1b1640));
+  box-shadow: 0 0 22px var(--skin-glow, rgba(185, 156, 255, 0.6));
 }
 
 /* ================= Feed ================= */
@@ -1565,9 +1565,9 @@ kbd {
   isolation: isolate;
 }
 .end-aurora {
-  --a1: #8b6cff;
-  --a2: #ff8fb1;
-  --a3: #6fe3ff;
+  --a1: var(--t1, #8b6cff);
+  --a2: var(--t2, #ff8fb1);
+  --a3: var(--t3, #6fe3ff);
 }
 .end-inner {
   position: relative;

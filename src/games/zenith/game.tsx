@@ -90,6 +90,9 @@ export default function create(ctx: GameContext): GameInstance {
   let stopAmbient: (() => void) | null = null;
   let stopComboPad: (() => void) | null = null;
   let endOverlay: HTMLDivElement | null = null;
+  // Second chance: set while the revive offer is pending; misses inside the grace window after a revive are free.
+  let reviving = false;
+  let graceUntil = 0;
 
   const gatePos = (ring: number): [number, number, number] => [0, RING_R[ring], 0.05];
   const ringFreq = (ring: number) => ctx.audio.midi(RING_MIDI[ring]);
@@ -196,7 +199,8 @@ export default function create(ctx: GameContext): GameInstance {
     view.miss[c.ring] = 1;
     stopComboPad?.();
     stopComboPad = null;
-    if (!preview) lives = Math.max(0, lives - 1);
+    if (!preview && now >= graceUntil) lives = Math.max(0, lives - 1);
+    if (!preview && lives <= 0 && !reviving) void tryRevive();
     ctx.audio.noise({ dur: 0.8, filter: 1800, sweepTo: 260, gain: 0.07, pan: clamp(c.mx / 3, -1, 1) });
     ctx.haptics.error();
     const label = err === null ? 'Missed' : err < 0 ? 'Early' : 'Late';
@@ -205,6 +209,24 @@ export default function create(ctx: GameContext): GameInstance {
     ctx.trial({ correct: false, level: stair.level });
     stair.record(false);
     hud();
+  }
+
+  /** Out of lives: ask the platform for a second chance (pauses the game while the offer is shown). */
+  async function tryRevive() {
+    reviving = true;
+    const granted = await ctx.revive();
+    if (alive && !over && granted) {
+      lives = 1;
+      graceUntil = ctx.time() + 1500;
+      view.auroraFlash = 1;
+      burstRef.current?.burst([0, 0, 0.05], 60, { color: '#fff1c4', speed: 2.4, life: 1.2 });
+      ctx.audio.success();
+      ctx.haptics.success();
+      ctx.caption('Second chance!');
+      ctx.announce('Second chance! One life restored');
+      hud();
+    }
+    reviving = false;
   }
 
   /** Player (or ghost) tap. ring = specific ring or null for "nearest". */
@@ -317,8 +339,9 @@ export default function create(ctx: GameContext): GameInstance {
       view.comets.push(...list);
       while (alive && list.some((c) => c.state < 2)) {
         await ctx.wait(80);
-        if (!preview && lives <= 0) break;
+        if (!preview && lives <= 0 && !reviving) break;
       }
+      while (alive && reviving) await ctx.wait(80);
       if (!alive) return;
       if (!preview && lives <= 0) break;
       // wave cleared

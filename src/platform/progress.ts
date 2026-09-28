@@ -11,11 +11,15 @@ export interface SessionRecord {
   mode: 'normal' | 'daily';
   timing: string;
   stats: Record<string, number>;
+  /** Boosted or revived run (kept out of normal personal bests). */
+  assisted?: boolean;
 }
 
 export interface GameProgress {
   best: number;
   bestRelaxed: number;
+  /** Best score from boosted/revived runs (never overwrites `best`). */
+  bestAssisted?: number;
   bestStats: Record<string, number>;
   highestLevel: number;
   lastLevel: number;

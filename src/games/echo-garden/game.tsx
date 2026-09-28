@@ -212,6 +212,18 @@ export default function create(ctx: GameContext): GameInstance {
       stair.record(ok);
       if (preview && stair.level > 4) stair.set(2);
       hud();
+      if (!preview && lives <= 0 && trials < 12 && (await ctx.revive())) {
+        if (!alive) return;
+        lives = 1;
+        hud();
+        ctx.audio.success();
+        ctx.haptics.success();
+        ctx.caption('Second chance!');
+        ctx.announce('Second chance! One life restored');
+        for (let i = 0; i < view.flowers; i++) view.pulse[i] = Math.max(view.pulse[i], 0.8);
+        burstRef.current?.burst([0, 1.2, 0], 50, { color: '#ffe8a8', speed: 2.5, life: 1.2, gravity: -0.4 });
+      }
+      if (!alive) return;
       if (!preview && (lives <= 0 || trials >= 12)) {
         await ctx.wait(900);
         const acc = taps ? Math.round((correctTaps / taps) * 100) : 0;

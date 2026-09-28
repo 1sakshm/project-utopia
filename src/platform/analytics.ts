@@ -17,7 +17,13 @@ export type AnalyticsEvent =
   | { name: 'game_action'; game_id: string; action: 'restart' | 'play_again' | 'next_game' | 'pause' }
   | { name: 'setting_changed'; key: string; value: string }
   | { name: 'wellbeing_reminder'; action: 'shown' | 'dismiss' | 'still-water' }
-  | { name: 'feedback_click'; from: string };
+  | { name: 'feedback_click'; from: string }
+  | { name: 'ad_request'; placement: string }
+  | { name: 'ad_result'; placement: string; result: string }
+  | { name: 'reward'; source: 'session' | 'quest' | 'double'; orbs: number }
+  | { name: 'shop_purchase'; item: string; price: number }
+  | { name: 'boost_used'; kind: string; via: 'inventory' | 'orbs' | 'ad'; game_id: string }
+  | { name: 'revive'; game_id: string; via: 'ad' | 'second-wind' | 'declined' };
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) || 'https://us.i.posthog.com';
