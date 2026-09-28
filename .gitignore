@@ -6,7 +6,3 @@ dev-dist
 shots
 .claude
 .vercel
-marketing/out/clips
-marketing/out/frames*
-marketing/out/*.log
-marketing/out/soundtrack.wav
