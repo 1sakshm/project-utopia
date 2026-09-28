@@ -141,8 +141,8 @@
 .feed {
   height: 100%;
   overflow-y: auto;
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
+  /* Touch paging is handled in JS (Feed.tsx): the page follows the finger, then eases to one card. */
+  touch-action: none;
   scroll-snap-type: y mandatory;
   overscroll-behavior: contain;
   scrollbar-width: none;

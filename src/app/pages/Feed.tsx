@@ -29,6 +29,8 @@ export default function Feed({ hidden }: { hidden: boolean }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [infoFor, setInfoFor] = useState<string | null>(null);
   const [coach, setCoach] = useState(() => !localStorage.getItem('utopia.coach'));
+  const coachRef = useRef(coach);
+  coachRef.current = coach;
   const restored = useRef(false);
   const impression = useRef<{ id: string; t: number; pos: number; variant: string } | null>(null);
 
@@ -62,52 +64,118 @@ export default function Feed({ hidden }: { hidden: boolean }) {
     const el = scroller.current;
     if (!el) return;
     let t = 0;
+    // While a finger is down or our release animation runs, the active card must not change
+    // (otherwise previews remount and titles re-animate mid-swipe).
+    let gesture = false;
     const settle = () => {
+      if (gesture) return;
       const i = Math.round(el.scrollTop / Math.max(1, el.clientHeight));
       setActive(Math.max(0, Math.min(items.length - 1, i)));
     };
     const onScroll = () => {
       window.clearTimeout(t);
       t = window.setTimeout(settle, 90);
-      if (coach) dismissCoach();
+      if (coachRef.current) dismissCoach();
     };
     el.addEventListener('scroll', onScroll, { passive: true });
 
-    // Reels-style swipe assist: a short flick or a drag past ~18% of the card advances exactly one card.
-    // Native mandatory snapping alone snaps back on short/slow drags without momentum.
-    let touching = false;
+    // Touch paging, TikTok-style: the feed has `touch-action: none`, so we own the gesture.
+    // The page follows the finger 1:1; on release it animates to exactly one card up/down (or back).
+    // Mixing native momentum + mandatory snap + a JS scrollTo on release caused a stutter-then-glide.
     let startY = 0;
-    let startT = 0;
+    let startTop = 0;
     let startIdx = 0;
+    let lastY = 0;
+    let lastT = 0;
+    let velocity = 0; // px/ms, positive = finger moving up (next card)
+    let moved = false;
+    let anim = 0;
+    const h = () => Math.max(1, el.clientHeight);
+    const maxTop = () => (items.length - 1) * h();
+    const cancelAnim = () => {
+      if (anim) cancelAnimationFrame(anim);
+      anim = 0;
+    };
+    const animateTo = (target: number) => {
+      cancelAnim();
+      const from = el.scrollTop;
+      const dist = Math.abs(target - from);
+      const dur = reduced() ? 0 : Math.min(360, 180 + dist * 0.25);
+      const t0 = performance.now();
+      const done = () => {
+        el.scrollTop = target;
+        el.style.scrollSnapType = '';
+        gesture = false;
+        anim = 0;
+        settle();
+      };
+      if (dur === 0 || dist < 1) return done();
+      const step = (now: number) => {
+        // rAF timestamps are frame-start times and can precede t0, so clamp at 0 (a negative k made the
+        // eased value jump backwards: the stutter seen on phones).
+        const k = Math.max(0, Math.min(1, (now - t0) / dur));
+        const e = 1 - Math.pow(1 - k, 3); // easeOutCubic
+        el.scrollTop = from + (target - from) * e;
+        if (k < 1) anim = requestAnimationFrame(step);
+        else done();
+      };
+      anim = requestAnimationFrame(step);
+    };
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
-      touching = true;
-      startY = e.touches[0].clientY;
-      startT = performance.now();
-      startIdx = Math.round(el.scrollTop / Math.max(1, el.clientHeight));
+      cancelAnim();
+      gesture = true;
+      moved = false;
+      el.style.scrollSnapType = 'none'; // snapping would fight programmatic 1:1 dragging
+      startY = lastY = e.touches[0].clientY;
+      lastT = performance.now();
+      velocity = 0;
+      startTop = el.scrollTop;
+      startIdx = Math.round(startTop / h());
     };
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!touching) return;
-      touching = false;
-      const t0 = e.changedTouches[0];
-      if (!t0) return;
-      const dy = startY - t0.clientY; // > 0 = swipe up = next card
-      const dt = Math.max(1, performance.now() - startT);
-      const h = el.clientHeight;
-      if (Math.abs(dy) < 40 || !(Math.abs(dy) / dt > 0.35 || Math.abs(dy) > h * 0.18)) return;
-      const target = Math.max(0, Math.min(items.length - 1, startIdx + (dy > 0 ? 1 : -1)));
-      el.scrollTo({ top: target * h, behavior: reduced() ? 'auto' : 'smooth' });
+    const onTouchMove = (e: TouchEvent) => {
+      if (!gesture || e.touches.length !== 1) return;
+      const y = e.touches[0].clientY;
+      const now = performance.now();
+      const dt = Math.max(1, now - lastT);
+      velocity = 0.8 * ((lastY - y) / dt) + 0.2 * velocity;
+      lastY = y;
+      lastT = now;
+      let top = startTop + (startY - y);
+      if (Math.abs(startY - y) > 6) moved = true;
+      // Rubber-band past the first/last card; never drift more than one card per gesture.
+      if (top < 0) top = top * 0.35;
+      else if (top > maxTop()) top = maxTop() + (top - maxTop()) * 0.35;
+      top = Math.max(startTop - h(), Math.min(startTop + h(), top));
+      el.scrollTop = top;
+    };
+    const onTouchEnd = () => {
+      if (!gesture) return;
+      if (!moved) {
+        // A tap: leave everything as it was (buttons receive their click normally).
+        el.style.scrollSnapType = '';
+        gesture = false;
+        return;
+      }
+      const dy = el.scrollTop - startTop; // > 0 = moved toward next card
+      const flick = Math.abs(velocity) > 0.35 && Math.sign(velocity) === Math.sign(dy);
+      let idx = startIdx;
+      if (Math.abs(dy) > h() * 0.2 || (flick && Math.abs(dy) > 16)) idx = startIdx + (dy > 0 ? 1 : -1);
+      idx = Math.max(0, Math.min(items.length - 1, idx));
+      animateTo(idx * h());
     };
     el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
     el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    const touching = () => gesture;
 
     // Keep the active card aligned when the feed's height changes (rotation, desktop resize) —
     // but not mid-gesture, and not for sub-pixel jitter from mobile address-bar animations.
     let lastH = el.clientHeight;
     const ro = new ResizeObserver(() => {
       const h = el.clientHeight;
-      if (touching || Math.abs(h - lastH) < 2) return;
+      if (touching() || Math.abs(h - lastH) < 2) return;
       lastH = h;
       el.scrollTop = useFeed.getState().activeIndex * h;
     });
@@ -115,13 +183,18 @@ export default function Feed({ hidden }: { hidden: boolean }) {
     return () => {
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
+      cancelAnim();
+      el.style.scrollSnapType = '';
       ro.disconnect();
       window.clearTimeout(t);
     };
+    // `coach` deliberately not a dependency (read via ref): re-running this effect mid-swipe
+    // would drop the gesture state the first time the coach mark is dismissed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, setActive, coach]);
+  }, [items.length, setActive]);
 
   // Impressions (dwell ≥ 1s) for analytics.
   useEffect(() => {
