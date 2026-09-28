@@ -24,6 +24,8 @@ class AudioEngine {
   master!: GainNode;
   music!: GainNode;
   sfx!: GainNode;
+  /** Speech (Sarvam TTS) bus, controlled by the Voice volume setting. */
+  voiceBus!: GainNode;
   voice = 0.9;
   private noiseBuf: AudioBuffer | null = null;
   private volumes: Volumes = { master: 0.8, music: 0.5, sfx: 0.8, voice: 0.9, mono: false };
@@ -43,6 +45,8 @@ class AudioEngine {
     this.master = ctx.createGain();
     this.music = ctx.createGain();
     this.sfx = ctx.createGain();
+    this.voiceBus = ctx.createGain();
+    this.voiceBus.connect(this.master);
     this.music.connect(this.master);
     this.sfx.connect(this.master);
     this.master.connect(comp);
@@ -66,6 +70,7 @@ class AudioEngine {
     this.master.gain.setTargetAtTime(v.master, t, 0.03);
     this.music.gain.setTargetAtTime(v.music, t, 0.03);
     this.sfx.gain.setTargetAtTime(v.sfx, t, 0.03);
+    this.voiceBus.gain.setTargetAtTime(v.voice, t, 0.03);
     this.master.channelCount = v.mono ? 1 : 2;
     this.master.channelCountMode = 'explicit';
     this.master.channelInterpretation = 'speakers';

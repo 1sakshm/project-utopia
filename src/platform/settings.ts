@@ -28,6 +28,11 @@ export interface Settings {
   weeklyGoalMin: 0 | 15 | 30 | 60;
   graphics: 'auto' | 'battery' | 'high';
   analytics: boolean;
+  /** Voice games: language spoken by the game voice (Sarvam bulbul) and expected in answers. */
+  voiceLang: 'en-IN' | 'hi-IN';
+  voiceGender: 'female' | 'male';
+  /** How voice games take answers: ask once, microphone (Sarvam speech-to-text), or typing. */
+  voiceInput: 'ask' | 'mic' | 'typing';
   calibrationMs: number;
 }
 
@@ -57,6 +62,9 @@ export const defaultSettings: Settings = {
   weeklyGoalMin: 0,
   graphics: 'auto',
   analytics: true, // anonymous usage stats (no cookies, no PII); can be turned off in Settings
+  voiceLang: 'en-IN',
+  voiceGender: 'female',
+  voiceInput: 'ask',
   calibrationMs: 0,
 };
 

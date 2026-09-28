@@ -2,6 +2,7 @@ import type { GameContext, GameInstance, GameModule, HudState, Layout, SessionSu
 import { createRng } from '@/sdk/rng';
 import { createStaircase } from '@/sdk/difficulty';
 import { audioEngine, createGameAudio } from './audio';
+import { createVoice } from './voice';
 import { getQuality } from './quality';
 import { toGameSettings, useSettings } from '@/platform/settings';
 import { useProgress } from '@/platform/progress';
@@ -16,6 +17,8 @@ export interface HostOptions {
   onCaption?: (text: string) => void;
   onAnnounce?: (text: string) => void;
   onError?: (err: unknown) => void;
+  /** Voice games: ask the player (privacy notice) whether to answer by microphone or typing. */
+  onVoiceConsent?: () => Promise<'mic' | 'typing'>;
   onTrial?: (t: { correct: boolean; rtMs?: number; level?: number }) => void;
 }
 
@@ -80,6 +83,7 @@ export function createGameHost(module: GameModule, container: HTMLElement, opts:
   }
 
   const audio = createGameAudio({ muted: () => muted, signal });
+  const voice = createVoice({ preview, signal, muted: () => muted, askConsent: opts.onVoiceConsent });
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
@@ -126,6 +130,7 @@ export function createGameHost(module: GameModule, container: HTMLElement, opts:
     settings,
     quality: getQuality(opts.mode),
     audio,
+    voice,
     startLevel: opts.startLevel,
     signal,
     layout: () => computeLayout(container),
@@ -158,6 +163,9 @@ export function createGameHost(module: GameModule, container: HTMLElement, opts:
       if (preview) return;
       const h = (e: KeyboardEvent) => {
         if (paused || e.repeat) return;
+        // Don't steal keystrokes while the player types an answer.
+        const t = e.target as HTMLElement | null;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
         const fn = map[e.code];
         if (fn) {
           e.preventDefault();

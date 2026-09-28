@@ -148,3 +148,20 @@ The dev server is already running at `http://localhost:5173` (do not start anoth
    difficulty adapt? Does the ghost loop forever in preview?
 
 The Game Lab is at `/lab?game=<id>&mode=play|preview` (`&autostart=1`, `&level=5`, `&seed=42` supported).
+
+## 9. Voice games (Sarvam AI speech)
+
+`ctx.voice` (see `VoiceApi` in `src/sdk/types.ts`) gives games speech in English (`en-IN`) and Hindi (`hi-IN`):
+- `await ctx.voice.speak(text, { lang?, voice?: 'female'|'male', pace?, pan? })`: resolves when playback ends.
+  Uses Sarvam AI (bulbul) through the app's `/api/tts` proxy (CDN-cached per phrase), falls back to device speech,
+  and no-ops in preview/muted. Calls may overlap (e.g. two voices panned left/right).
+- `ctx.voice.prefetch(texts, opts)`: warm upcoming phrases. `ctx.voice.stop()`: stop this game's speech.
+- `ctx.voice.source()`: `'sarvam' | 'device' | 'none'`; `ctx.voice.lang()` / `setLang()`.
+- Spoken answers: use **`createAnswerBar(ctx)`** from `@/sdk/voiceui` (mic button with level ring, typing fallback,
+  consent, captions). `await bar.ask({ prompt, maxMs })` returns the transcript or typed text ('' if nothing).
+  `createLangToggle(ctx, onChange)` adds the EN · हि chip. Never call `getUserMedia` directly.
+- Matching helpers in `@/sdk/speech`: `normalizeText`, `words`, `similarity`, `heardWord`, `bestMatch`,
+  `parseDigits` (handles digits, English and Hindi number words).
+- Server: `api/_sarvam.ts` (Vercel Edge functions `api/tts.ts`, `api/stt.ts`); key in `SARVAM_API_KEY`
+  (Vercel env, or `.env.local` for `npm run dev`). Without a key, games still work via device speech + typing.
+- Designs for the voice games: `docs/VOICE_GAMES.md`. Reference: `src/games/word-echo/`.

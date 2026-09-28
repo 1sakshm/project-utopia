@@ -14,6 +14,7 @@ const GROUPS = [
   { id: 'visual', label: 'Visual', title: 'See it your way' },
   { id: 'audio', label: 'Audio & haptics', title: 'Sound and touch' },
   { id: 'gameplay', label: 'Gameplay', title: 'Play at your pace' },
+  { id: 'voice', label: 'Voice', title: 'Speak and listen' },
   { id: 'wellbeing', label: 'Wellbeing', title: 'Look after yourself' },
   { id: 'data', label: 'Data & privacy', title: 'Your data, your call' },
 ] as const;
@@ -275,6 +276,36 @@ export default function Settings() {
         <Toggle k="leftHanded" label="Left-handed layout" />
         <Toggle k="hideFastReaction" label="Move quick-reaction games to the end of the feed" />
         <Toggle k="hideAudioDependent" label="Move sound-dependent games to the end of the feed" />
+      </Group>
+
+      <Group id="voice">
+        <Segmented
+          k="voiceLang"
+          label="Voice language"
+          desc="The language voice games speak and listen in"
+          options={[
+            ['en-IN', 'English'],
+            ['hi-IN', 'हिन्दी'],
+          ]}
+        />
+        <Segmented
+          k="voiceGender"
+          label="Game voice"
+          options={[
+            ['female', 'Female'],
+            ['male', 'Male'],
+          ]}
+        />
+        <Segmented
+          k="voiceInput"
+          label="Answer voice games by"
+          desc="Microphone answers are sent to Sarvam AI to be turned into text and aren’t stored by Utopia"
+          options={[
+            ['ask', 'Ask me'],
+            ['mic', 'Microphone'],
+            ['typing', 'Typing'],
+          ]}
+        />
       </Group>
 
       <Group id="wellbeing">

@@ -196,6 +196,43 @@ export interface GameAudio {
   readonly musicOut: AudioNode | null;
 }
 
+export type VoiceLang = 'en-IN' | 'hi-IN';
+
+export interface SpeakOptions {
+  lang?: VoiceLang;
+  /** Which voice: 'female' (default from settings) or 'male'. */
+  voice?: 'female' | 'male';
+  /** 0.6–1.6, default 1. */
+  pace?: number;
+  /** Stereo position -1 (left) … 1 (right). */
+  pan?: number;
+}
+
+/**
+ * Speech for voice games. Uses Sarvam AI (bulbul TTS / saaras STT) via the app's /api proxy, falling back to the
+ * device voice (Web Speech) and to typing. In preview mode everything resolves immediately (no audio, no mic).
+ */
+export interface VoiceApi {
+  /** Where speech comes from right now. 'none' = no audio possible (show captions). */
+  source(): 'sarvam' | 'device' | 'none';
+  /** Player's preferred language (from Settings; games may offer a toggle via setLang). */
+  lang(): VoiceLang;
+  setLang(l: VoiceLang): void;
+  /** Speak text; resolves when playback ends (or immediately if unavailable). Several calls may overlap (e.g. with pan). */
+  speak(text: string, opts?: SpeakOptions): Promise<void>;
+  /** Warm the cache for upcoming phrases (no playback). */
+  prefetch(texts: string[], opts?: SpeakOptions): void;
+  /** Stop all speech from this game. */
+  stop(): void;
+  /** 'mic' or 'typing': asks the player once (privacy notice) the first time a game needs spoken answers. */
+  inputMode(): Promise<'mic' | 'typing'>;
+  /**
+   * Record one spoken answer (stops after a short silence or maxMs) and return the transcript.
+   * Returns '' if nothing was heard, null if the mic/transcription is unavailable (switch to typing).
+   */
+  listen(opts?: { lang?: VoiceLang; maxMs?: number; onLevel?: (level: number) => void }): Promise<string | null>;
+}
+
 export interface GameContext {
   readonly manifest: GameManifest;
   readonly container: HTMLElement;
@@ -207,6 +244,8 @@ export interface GameContext {
   readonly settings: GameSettings; // live object, always current
   readonly quality: QualityProfile;
   readonly audio: GameAudio;
+  /** Speech (TTS) and spoken answers (STT) for voice games. */
+  readonly voice: VoiceApi;
   /** Suggested starting level from the player's history (1 for new players). */
   readonly startLevel: number;
   readonly signal: AbortSignal;

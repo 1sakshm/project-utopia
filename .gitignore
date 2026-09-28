@@ -6,3 +6,5 @@ dev-dist
 shots
 .claude
 .vercel
+.env.local
+.env*.local

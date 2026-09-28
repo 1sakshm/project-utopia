@@ -1674,3 +1674,20 @@ kbd {
   background: none;
   color: #ffe08a;
 }
+
+/* Voice consent card */
+.voice-consent .vc-mic {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 8px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(185, 156, 255, 0.35), rgba(185, 156, 255, 0.08));
+  box-shadow: 0 0 30px rgba(185, 156, 255, 0.4);
+}
+.voice-consent p {
+  line-height: 1.55;
+  margin: 0 0 18px;
+}

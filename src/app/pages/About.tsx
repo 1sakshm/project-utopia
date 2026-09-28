@@ -24,7 +24,7 @@ const PRINCIPLES: Array<{ title: string; body: string }> = [
   },
   { title: 'Respectful of your attention', body: 'No ads, no currencies, no streak guilt, no notifications. The feed ends instead of scrolling forever, and gentle break reminders never interrupt a game.' },
   { title: 'Accessible by default', body: 'High contrast, reduced motion, relaxed timing, captions for sounds, keyboard play and big touch targets, set once and applied to every game.' },
-  { title: 'Yours', body: 'Progress lives on your device, with no account needed. We count anonymous usage (no names, emails or cookies) to see what helps, and you can switch that off in Settings. Export or delete everything whenever you like.' },
+  { title: 'Yours', body: 'Progress lives on your device, with no account needed. We count anonymous usage (no names, emails or cookies) to see what helps, and you can switch that off in Settings. Voice games speak with Sarvam AI voices; if you choose to answer by microphone, your recording goes to Sarvam AI to be turned into text and isn’t stored by Utopia. Export or delete everything whenever you like.' },
 ];
 
 export default function About() {

@@ -40,6 +40,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   const [showHowTo, setShowHowTo] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceAsk, setVoiceAsk] = useState<null | ((c: 'mic' | 'typing') => void)>(null);
   const say = usePlayUi((s) => s.say);
 
   const go = useCallback((p: Phase) => {
@@ -86,6 +87,15 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       onCaption: (t) => setCaption(t),
       onAnnounce: (t) => say(t),
       onEnd: (s) => finish(s, h),
+      onVoiceConsent: () =>
+        new Promise((resolve) => {
+          h.pause();
+          setVoiceAsk(() => (c: 'mic' | 'typing') => {
+            setVoiceAsk(null);
+            h.resume();
+            resolve(c);
+          });
+        }),
       onError: (e) => {
         console.error(e);
         setError(String((e as Error)?.message ?? e));
@@ -394,6 +404,29 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       {phase === 'results' && result && (
         <div className="play-center play-dim">
           <Results m={m} r={result} onAgain={() => restart('play_again')} onExit={() => doExit()} onNext={nextGame} />
+        </div>
+      )}
+
+      {voiceAsk && (
+        <div className="play-center play-dim">
+          <div className="glass-card small voice-consent" role="dialog" aria-modal="true" aria-labelledby="vc-title">
+            <div className="vc-mic" aria-hidden>🎙️</div>
+            <h2 className="display" id="vc-title">
+              Answer with your voice?
+            </h2>
+            <p className="muted">
+              If you use the microphone, your recording is sent to Sarvam AI to turn your speech into text. Utopia doesn’t store it. You can
+              always type instead, and change this later in Settings → Voice.
+            </p>
+            <div className="row">
+              <button className="btn" onClick={() => voiceAsk('typing')}>
+                Type instead
+              </button>
+              <button className="btn btn-primary" onClick={() => voiceAsk('mic')} autoFocus>
+                Use microphone
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
