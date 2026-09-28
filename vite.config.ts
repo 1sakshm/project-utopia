@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
-import { handleSTT, handleTTS } from './api/_sarvam';
+import { handleSTT, handleTTS } from './api/_sarvam.ts';
 
 /** Dev-only: serve /api/tts and /api/stt locally (same handlers as the Vercel functions). Key from .env.local. */
 function sarvamDevApi(key: string | undefined): Plugin {
