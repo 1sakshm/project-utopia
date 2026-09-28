@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Utopia LinkedIn banner</title>
+    <link rel="stylesheet" href="./brand.css" />
+    <style>
+      /* 1584×396. LinkedIn's profile photo covers the lower-left ~350px, so the left third stays decorative. */
+      #art {
+        position: relative;
+        width: 1584px;
+        height: 396px;
+        overflow: hidden;
+        background: linear-gradient(100deg, #0b0d14 0%, #120f26 45%, #0d0f1c 100%);
+      }
+      .aurora i.a {
+        width: 900px;
+        height: 900px;
+        left: -380px;
+        top: -520px;
+        background: radial-gradient(circle, rgba(139, 108, 255, 0.55), transparent 62%);
+      }
+      .aurora i.b {
+        width: 760px;
+        height: 760px;
+        left: 520px;
+        top: -300px;
+        background: radial-gradient(circle, rgba(255, 143, 177, 0.28), transparent 62%);
+      }
+      .aurora i.c {
+        width: 900px;
+        height: 900px;
+        right: -300px;
+        top: -200px;
+        background: radial-gradient(circle, rgba(111, 227, 255, 0.28), transparent 60%);
+      }
+      /* Decorative planet in the top-left (clear of the profile photo zone) */
+      .planet {
+        position: absolute;
+        left: 150px;
+        top: 34px;
+      }
+      .planet .orb {
+        position: absolute;
+        left: 0;
+        top: 0;
+        font-size: 150px;
+        width: 1em;
+        height: 1em;
+      }
+      .planet .orbit {
+        left: 75px;
+        top: 75px;
+        font-size: 150px;
+        width: 1.62em;
+        height: 0.46em;
+      }
+      .planet .orbit-front {
+        clip-path: inset(50% 0 0 0);
+        border-color: rgba(255, 255, 255, 0.55);
+      }
+      .copy {
+        position: absolute;
+        left: 470px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 620px;
+      }
+      .copy .kicker {
+        font-size: 14px;
+      }
+      .copy .kicker .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 45%, #6c5cff 80%);
+        box-shadow: 0 0 12px rgba(185, 156, 255, 0.9);
+      }
+      .copy h1 {
+        margin: 16px 0 14px;
+        font-size: 58px;
+        line-height: 1.02;
+      }
+      .copy p {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text2);
+        line-height: 1.5;
+      }
+      .copy .pills {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+      }
+      .copy .pills span {
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text2);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      /* Fan of real game posters on the right */
+      .cards {
+        position: absolute;
+        right: 70px;
+        top: 50%;
+        width: 400px;
+        height: 330px;
+        transform: translateY(-50%);
+      }
+      .card {
+        position: absolute;
+        width: 150px;
+        height: 250px;
+        border-radius: 22px;
+        background-size: cover;
+        background-position: center;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow:
+          0 24px 50px -16px rgba(0, 0, 0, 0.7),
+          0 0 40px -10px var(--glow, rgba(185, 156, 255, 0.6));
+      }
+      .card::after {
+        content: attr(data-title);
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        font-family: 'Fraunces', serif;
+        font-size: 17px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+      }
+      .card.right::after {
+        text-align: right;
+      }
+      .card::before {
+        content: '';
+        position: absolute;
+        inset: 45% 0 0 0;
+        border-radius: 0 0 22px 22px;
+        background: linear-gradient(180deg, transparent, rgba(5, 6, 12, 0.85));
+      }
+    </style>
+  </head>
+  <body>
+    <div id="art">
+      <div class="aurora"><i class="a"></i><i class="b"></i><i class="c"></i></div>
+      <div class="planet">
+        <div class="orbit"><span class="moon"></span></div>
+        <div class="orb no-horizon"></div>
+        <div class="orbit orbit-front"></div>
+      </div>
+      <div class="copy">
+        <span class="kicker"><span class="dot"></span> Project Utopia</span>
+        <h1 class="display">Beautiful little games, <span class="accent">honestly</span> made.</h1>
+        <p>Short games designed around memory, attention, rhythm, planning and calm. Discovered like reels, played in a second.</p>
+        <div class="pills"><span>20 games, and growing</span><span>No sign-up</span><span>No ads</span><span>Plays in your browser</span></div>
+      </div>
+      <div class="cards">
+        <div class="card" data-title="Tidal Beat" style="left: 0; top: 50px; transform: rotate(-10deg); background-image: url(/posters/tidal-beat.jpg); --glow: rgba(111, 227, 255, 0.55)"></div>
+        <div class="card right" data-title="Lumen" style="left: 250px; top: 50px; transform: rotate(10deg); background-image: url(/posters/lumen.jpg); --glow: rgba(255, 179, 122, 0.55)"></div>
+        <div class="card" data-title="Echo Garden" style="left: 125px; top: 30px; transform: rotate(0deg); background-image: url(/posters/echo-garden.jpg); z-index: 2; --glow: rgba(185, 156, 255, 0.7)"></div>
+      </div>
+      <div class="grain"></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Utopia logo</title>
+    <link rel="stylesheet" href="./brand.css" />
+    <style>
+      /* 1080×1080 square; everything important sits inside the central circle (LinkedIn crops to a circle). */
+      #art {
+        position: relative;
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        background: radial-gradient(60% 60% at 50% 46%, #1d1747 0%, #110f24 55%, #0b0d14 100%);
+      }
+      .aurora i.a {
+        width: 900px;
+        height: 900px;
+        left: -260px;
+        top: -300px;
+        background: radial-gradient(circle, rgba(139, 108, 255, 0.55), transparent 65%);
+      }
+      .aurora i.b {
+        width: 800px;
+        height: 800px;
+        right: -300px;
+        top: 80px;
+        background: radial-gradient(circle, rgba(255, 143, 177, 0.35), transparent 62%);
+      }
+      .aurora i.c {
+        width: 760px;
+        height: 760px;
+        left: 120px;
+        bottom: -420px;
+        background: radial-gradient(circle, rgba(111, 227, 255, 0.3), transparent 60%);
+      }
+      .halo {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 900px;
+        height: 900px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(185, 156, 255, 0.35) 0%, rgba(185, 156, 255, 0.08) 38%, transparent 62%);
+      }
+      .ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px solid rgba(255, 255, 255, 0.08);
+      }
+      .orb {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        font-size: 520px; /* orb uses em for its details */
+        width: 1em;
+        height: 1em;
+        transform: translate(-50%, -50%);
+      }
+      .mote {
+        position: absolute;
+        border-radius: 50%;
+        background: #fff4c2;
+        box-shadow: 0 0 18px 4px rgba(255, 232, 168, 0.7);
+      }
+      /* front half of the ring passes in front of the orb */
+      .orbit-front {
+        clip-path: inset(50% 0 0 0);
+        border-color: rgba(255, 255, 255, 0.55);
+      }
+      body.transparent #art {
+        background: transparent;
+      }
+      body.transparent .aurora,
+      body.transparent .grain,
+      body.transparent .ring {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="art">
+      <div class="aurora"><i class="a"></i><i class="b"></i><i class="c"></i></div>
+      <div class="halo"></div>
+      <div class="ring" style="width: 760px; height: 760px"></div>
+      <div class="ring" style="width: 900px; height: 900px; border-color: rgba(255, 255, 255, 0.045)"></div>
+      <div class="orbit" style="left: 50%; top: 50%; font-size: 520px; width: 1.62em; height: 0.46em"><span class="moon"></span></div>
+      <div class="orb no-horizon"></div>
+      <div class="orbit orbit-front" style="left: 50%; top: 50%; font-size: 520px; width: 1.62em; height: 0.46em"></div>
+      <span class="mote" style="left: 270px; top: 300px; width: 10px; height: 10px"></span>
+      <span class="mote" style="left: 800px; top: 250px; width: 7px; height: 7px; opacity: 0.8"></span>
+      <span class="mote" style="left: 835px; top: 740px; width: 9px; height: 9px; opacity: 0.7"></span>
+      <span class="mote" style="left: 230px; top: 720px; width: 6px; height: 6px; opacity: 0.6"></span>
+      <div class="grain"></div>
+    </div>
+    <script>
+      if (location.hash === '#transparent') document.body.classList.add('transparent');
+    </script>
+  </body>
+</html>

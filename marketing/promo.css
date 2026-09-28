@@ -1,0 +1,375 @@
+@import '/src/styles/editorial.css';
+
+#art {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(90% 60% at 50% 40%, #16122f 0%, #0d0c1c 60%, #0b0d14 100%);
+  font-size: 16px;
+}
+.scene {
+  position: absolute;
+  inset: 0;
+}
+.scene.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 70px;
+}
+.planet {
+  position: relative;
+}
+.planet .orbit {
+  position: absolute;
+}
+.orbit-front {
+  clip-path: inset(50% 0 0 0);
+  border-color: rgba(255, 255, 255, 0.55) !important;
+}
+.kicker.big-kicker {
+  margin-top: 70px;
+  font-size: 26px;
+}
+.kdot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff4d0, #ff9fb8 45%, #6c5cff 80%);
+  box-shadow: 0 0 18px rgba(185, 156, 255, 0.9);
+}
+.headline {
+  margin: 28px 0 0;
+  font-size: 104px;
+  line-height: 1.02;
+}
+.feedfmt .headline {
+  font-size: 92px;
+}
+
+/* ---------- B: feed ---------- */
+.question {
+  position: absolute;
+  left: 70px;
+  right: 70px;
+  top: 150px;
+  margin: 0;
+  font-size: 92px;
+  line-height: 1.02;
+  text-align: center;
+}
+.feedfmt .question {
+  top: 70px;
+  font-size: 70px;
+}
+.phone {
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  border-radius: 64px;
+  padding: 14px;
+  background: linear-gradient(160deg, #2a2744, #121022);
+  box-shadow:
+    0 50px 120px -30px rgba(0, 0, 0, 0.8),
+    0 0 90px -20px rgba(185, 156, 255, 0.55),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+.feedfmt .phone {
+  bottom: -60px;
+}
+.phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 52px;
+  overflow: hidden;
+  background: #000;
+}
+.phone-feed {
+  position: absolute;
+  inset: 0;
+}
+.phone-card {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.phone-scrim {
+  position: absolute;
+  inset: 45% 0 0 0;
+  background: linear-gradient(180deg, transparent, rgba(5, 6, 12, 0.92));
+}
+.phone-meta {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.phone-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(10, 12, 20, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.phone-meta b {
+  font-size: 52px;
+  font-weight: 500;
+  line-height: 1;
+}
+.phone-play {
+  margin-top: 8px;
+  width: 100%;
+  padding: 16px 0;
+  border-radius: 999px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 22px;
+  color: #120e24;
+  background: linear-gradient(135deg, #fff, #efe8ff);
+  box-shadow: 0 10px 30px -8px rgba(185, 156, 255, 0.7);
+}
+.finger {
+  position: absolute;
+  left: 50%;
+  width: 70px;
+  height: 70px;
+  margin-left: -35px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.2) 55%, transparent 70%);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- C: montage ---------- */
+.montage {
+  background: #000;
+}
+.clip-full {
+  position: absolute;
+  inset: 0;
+}
+.clip-full .clip {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.clip-bg {
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  filter: blur(40px) brightness(0.55) saturate(1.3);
+}
+.clip-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 88%;
+  aspect-ratio: 9 / 16;
+  translate: -50% -50%;
+  border-radius: 48px;
+  overflow: hidden;
+  box-shadow:
+    0 40px 100px -30px rgba(0, 0, 0, 0.9),
+    0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+.clip-card .clip {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.clip-scrim {
+  position: absolute;
+  inset: 55% 0 0 0;
+  background: linear-gradient(180deg, transparent, rgba(5, 6, 12, 0.85));
+}
+.clip-meta {
+  position: absolute;
+  left: 70px;
+  right: 70px;
+  bottom: 170px;
+}
+.clip-card .clip-meta {
+  left: 40px;
+  right: 40px;
+  bottom: 50px;
+}
+.clip-kicker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(244, 242, 255, 0.85);
+}
+.clip-card .clip-kicker {
+  font-size: 20px;
+}
+.clip-title {
+  margin: 0;
+  font-size: 120px;
+  line-height: 0.98;
+  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.5);
+}
+.clip-card .clip-title {
+  font-size: 74px;
+}
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+.progress-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 90px;
+  translate: -50% 0;
+  display: flex;
+  gap: 10px;
+}
+.feedfmt .progress-dots {
+  bottom: 30px;
+}
+.progress-dots i {
+  width: 34px;
+  height: 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.progress-dots i.done {
+  background: rgba(255, 255, 255, 0.6);
+}
+.progress-dots i.on {
+  background: #fff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+
+/* ---------- D: promises ---------- */
+.promises {
+  overflow: hidden;
+}
+.mosaic {
+  position: absolute;
+  inset: -30% -30%;
+  display: grid;
+  gap: 22px;
+  opacity: 0.22;
+  filter: saturate(1.2);
+}
+.mosaic-tile {
+  aspect-ratio: 9 / 14;
+  border-radius: 28px;
+  background-size: cover;
+  background-position: center;
+}
+.promises::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(75% 55% at 50% 50%, rgba(11, 13, 20, 0.72), rgba(11, 13, 20, 0.92));
+}
+.promise {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 70px;
+}
+.promise-title {
+  margin: 0;
+  font-size: 128px;
+  line-height: 1;
+}
+.feedfmt .promise-title {
+  font-size: 104px;
+}
+.promise-sub {
+  margin: 34px 0 0;
+  font-size: 34px;
+  font-weight: 700;
+  color: rgba(244, 242, 255, 0.78);
+}
+.feedfmt .promise-sub {
+  font-size: 28px;
+}
+.icons-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 46px;
+  max-width: 760px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 40px;
+  max-width: 820px;
+}
+.chip-p {
+  padding: 14px 24px;
+  border-radius: 999px;
+  font-size: 28px;
+  font-weight: 700;
+  color: rgba(244, 242, 255, 0.85);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* ---------- E: end ---------- */
+.wordmark {
+  margin: 60px 0 0;
+  font-size: 128px;
+  line-height: 1;
+}
+.feedfmt .wordmark {
+  margin-top: 40px;
+  font-size: 104px;
+}
+.tagline {
+  margin: 22px 0 0;
+  font-size: 38px;
+  font-weight: 600;
+  color: rgba(244, 242, 255, 0.78);
+}
+.cta {
+  margin-top: 56px;
+  padding: 26px 48px;
+  border-radius: 999px;
+  font-size: 36px;
+  font-weight: 800;
+  color: #120e24;
+  background: linear-gradient(120deg, #fff 0%, #f1e9ff 60%, #e3f6ff 100%);
+  box-shadow: 0 20px 60px -14px rgba(185, 156, 255, 0.8);
+}
+.credit {
+  margin: 44px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(244, 242, 255, 0.55);
+}
