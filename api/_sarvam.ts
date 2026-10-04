@@ -15,6 +15,27 @@ export const SPEAKERS: Record<string, true> = { priya: true, kavya: true, shubh:
 const MAX_TTS_CHARS = 200;
 const MAX_STT_BYTES = 600 * 1024; // ~18s of 16 kHz mono 16-bit WAV
 
+/**
+ * Best-effort per-IP rate limit (sliding 60s window). Each edge isolate keeps its own counts, so this stops simple
+ * loops from one machine but is not a global guarantee: also add a Cloudflare rate-limiting rule for /api/* and a
+ * spending cap in the Sarvam dashboard (see docs/PRD_HARDENING.md H1).
+ */
+const hits = new Map<string, number[]>();
+const LIMITS = { tts: 40, stt: 20 } as const; // requests per IP per minute that reach Sarvam
+export function rateLimited(req: Request, kind: keyof typeof LIMITS, now = Date.now()): boolean {
+  const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const k = `${kind}:${ip}`;
+  const recent = (hits.get(k) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= LIMITS[kind]) {
+    hits.set(k, recent);
+    return true;
+  }
+  recent.push(now);
+  hits.set(k, recent);
+  if (hits.size > 5000) hits.clear(); // keep memory bounded
+  return false;
+}
+
 function json(status: number, body: unknown, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
 }
@@ -52,6 +73,7 @@ export async function handleTTS(req: Request, key: string | undefined): Promise<
   if (!(LANGS as readonly string[]).includes(lang)) return json(400, { error: 'unsupported lang' });
   if (!SPEAKERS[speaker]) return json(400, { error: 'unsupported speaker' });
 
+  if (rateLimited(req, 'tts')) return json(429, { error: 'Too many requests' }, { 'retry-after': '60' });
   const r = await fetch(`${SARVAM}/text-to-speech`, {
     method: 'POST',
     headers: { 'api-subscription-key': key, 'content-type': 'application/json' },
@@ -79,6 +101,7 @@ export async function handleSTT(req: Request, key: string | undefined): Promise<
   if (!key) return json(503, { error: 'Voice service not configured' });
   if (req.method !== 'POST') return json(405, { error: 'POST only' });
   if (!sameOrigin(req)) return json(403, { error: 'Forbidden' });
+  if (rateLimited(req, 'stt')) return json(429, { error: 'Too many requests' }, { 'retry-after': '60' });
   const buf = await req.arrayBuffer();
   if (buf.byteLength < 1000) return json(400, { error: 'audio too short' });
   if (buf.byteLength > MAX_STT_BYTES) return json(413, { error: 'audio too long' });

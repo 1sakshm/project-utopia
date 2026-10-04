@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { safeJSONStorage } from './safeStorage';
 import type { GameSettings } from '@/sdk/types';
 
 export interface Settings {
@@ -8,6 +9,8 @@ export interface Settings {
   previewStyle: 'auto' | 'live' | 'still';
   textScale: number;
   readingFont: 'default' | 'atkinson';
+  /** App look: 'soft' = neumorphism (light, extruded surfaces); 'aurora' = the original dark glass look. */
+  uiStyle: 'soft' | 'aurora';
   flashIntensity: 'normal' | 'reduced' | 'none';
   master: number;
   music: number;
@@ -26,6 +29,8 @@ export interface Settings {
   showKeyHints: boolean;
   breakReminderMin: 0 | 20 | 40;
   weeklyGoalMin: 0 | 15 | 30 | 60;
+  /** Opt-in weekly rhythm: play on N of the 7 days this week (the rest are rest days). 0 = off. */
+  rhythmDays: 0 | 3 | 4 | 5;
   graphics: 'auto' | 'battery' | 'high';
   analytics: boolean;
   /** Voice games: language spoken by the game voice (Sarvam bulbul) and expected in answers. */
@@ -44,6 +49,7 @@ export const defaultSettings: Settings = {
   previewStyle: 'auto',
   textScale: 1,
   readingFont: 'default',
+  uiStyle: 'soft',
   flashIntensity: 'normal',
   master: 0.8,
   music: 0.5,
@@ -62,6 +68,7 @@ export const defaultSettings: Settings = {
   showKeyHints: false,
   breakReminderMin: 40,
   weeklyGoalMin: 0,
+  rhythmDays: 0,
   graphics: 'auto',
   analytics: true, // anonymous usage stats (no cookies, no PII); can be turned off in Settings
   voiceLang: 'en-IN',
@@ -85,6 +92,7 @@ export const useSettings = create<SettingsStore>()(
     }),
     {
       name: 'utopia.settings',
+      storage: safeJSONStorage(),
       version: 2,
       // v2: anonymous analytics became on-by-default (with an off switch). Earlier saves stored the old
       // default (off) without the player ever choosing it, so they move to the new default once.

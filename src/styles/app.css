@@ -1859,3 +1859,16 @@ kbd {
   color: #ffe08a;
   letter-spacing: 0.1em;
 }
+
+.error-card {
+  display: grid;
+  gap: 14px;
+  align-content: center;
+  min-height: 60vh;
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: center;
+}
+.error-card .row {
+  justify-content: center;
+}

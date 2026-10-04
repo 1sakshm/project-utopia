@@ -9,7 +9,7 @@ import { AbilityGlyph, CountUp, Hero, SectionHead, d, useReveal } from '../compo
 import { useEconomy, levelProgress, questsFor, utcDay } from '@/platform/economy';
 import { track } from '@/platform/analytics';
 import Wallet from '../components/Wallet';
-import { starsByRing } from '@/platform/retention';
+import { starsByRing, weekRhythm } from '@/platform/retention';
 import '@/styles/progress.css';
 
 /** Sparkline that draws itself when its [data-reveal] ancestor becomes visible. */
@@ -45,6 +45,52 @@ function Ring({ value, color, size = 96 }: { value: number; color: string; size?
       {/* no arc at all when empty: a zero-length round-capped stroke still renders as a dot */}
       {v > 0.005 && <circle cx={size / 2} cy={size / 2} r={r} className="pr-ring-arc" transform={`rotate(-90 ${size / 2} ${size / 2})`} />}
     </svg>
+  );
+}
+
+/** Opt-in weekly rhythm (Settings → Wellbeing). Offered only after a player has come back on a second day. */
+function RhythmCard() {
+  const goal = useSettings((s) => s.rhythmDays);
+  const set = useSettings((s) => s.set);
+  const history = useProgress((s) => s.history);
+  const daysEver = new Set(history.map((h) => new Date(h.t).toDateString())).size;
+  if (!goal) {
+    if (daysEver < 2) return null;
+    return (
+      <div className="ed-card rhythm-card">
+        <div>
+          <p className="ab-eyebrow">Optional</p>
+          <h3 className="display rhythm-title">A gentle weekly rhythm?</h3>
+          <p className="rhythm-sub">Pick how many days a week you’d like to play. The rest are rest days. Nothing breaks if you miss one.</p>
+        </div>
+        <div className="row">
+          {([3, 4, 5] as const).map((n) => (
+            <button key={n} className="btn" onClick={() => set({ rhythmDays: n })}>
+              {n} days
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  const r = weekRhythm(history, goal);
+  const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  return (
+    <div className="ed-card rhythm-card" aria-label={`Weekly rhythm: ${r.days} of ${goal} days this week`}>
+      <div>
+        <p className="ab-eyebrow">This week’s rhythm</p>
+        <h3 className="display rhythm-title">{r.met ? 'Rhythm kept this week ✓' : `${r.days} of ${goal} days`}</h3>
+        <p className="rhythm-sub">{r.met ? 'Anything more is a bonus. Enjoy the rest days.' : `${r.restLeft} rest day${r.restLeft === 1 ? '' : 's'} left this week. Missing a day costs nothing.`}</p>
+      </div>
+      <ol className="rhythm-week">
+        {r.played.map((p, i) => (
+          <li key={i} className={`${p ? 'is-played' : i < r.todayIdx ? 'is-rest' : ''} ${i === r.todayIdx ? 'is-today' : ''}`}>
+            <span aria-hidden>{p ? '●' : i < r.todayIdx ? '☾' : '○'}</span>
+            <small>{DAYS[i]}</small>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -203,6 +249,7 @@ export default function Progress() {
 
       <section className="ab-section is-tight">
         <ProfileCard />
+        <RhythmCard />
         <IosKeepHint />
       </section>
 

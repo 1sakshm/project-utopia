@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { useEconomy } from './economy';
 import { track } from './analytics';
+import { ADS_MODE } from './adsConfig';
 
 export type AdPlacement = 'double-orbs' | 'second-chance' | 'boost' | 'shop';
 export type AdResult = 'rewarded' | 'dismissed' | 'unavailable';
@@ -65,7 +66,7 @@ const h5Provider: AdProvider = {
     }),
 };
 
-const provider: AdProvider = import.meta.env.VITE_ADS_PROVIDER === 'h5' ? h5Provider : mockProvider;
+const provider: AdProvider = ADS_MODE === 'h5' ? h5Provider : mockProvider;
 
 /** Show a rewarded ad if the player asks for one. Respects the daily cap. */
 export async function showRewardedAd(placement: AdPlacement): Promise<AdResult> {

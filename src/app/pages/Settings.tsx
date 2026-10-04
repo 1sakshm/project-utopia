@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useSettings, prefersReducedMotion, type Settings as S } from '@/platform/settings';
 import { useProgress } from '@/platform/progress';
 import { useEconomy, AD_DAILY_CAP } from '@/platform/economy';
+import { ADS_ENABLED } from '@/platform/adsConfig';
 import { track } from '@/platform/analytics';
 import { audioEngine } from '@/runtime/audio';
 import { navigate } from '../router';
@@ -145,6 +146,8 @@ export default function Settings() {
   const adsLeft = useEconomy((x) => x.adsLeft());
   const [canInstall, setCanInstall] = useState(!!deferredInstall);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingImport, setPendingImport] = useState<null | { data: ImportData; label: string }>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   useReveal(root);
   useEffect(() => {
     const on = () => setCanInstall(true);
@@ -166,6 +169,35 @@ export default function Settings() {
     a.download = `utopia-data-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  async function pickImport(file: File | undefined) {
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text()) as ImportData;
+      if (!data || typeof data !== 'object' || (!data.progress && !data.settings && !data.economy)) throw new Error('not a Utopia export');
+      const games = data.progress ? Object.keys(data.progress).length : 0;
+      setPendingImport({ data, label: `${games} game${games === 1 ? '' : 's'} from ${data.exportedAt ? new Date(data.exportedAt).toLocaleDateString() : 'an export'}` });
+      setImportMsg(null);
+    } catch {
+      setImportMsg('That file isn’t a Utopia export.');
+    }
+  }
+
+  function applyImport() {
+    if (!pendingImport) return;
+    const { data } = pendingImport;
+    if (data.progress) useProgress.setState({ games: data.progress, history: Array.isArray(data.history) ? data.history : [] });
+    if (data.economy) {
+      const known = Object.keys(useEconomy.getState()).filter((k) => typeof (useEconomy.getState() as unknown as Record<string, unknown>)[k] !== 'function');
+      useEconomy.setState(Object.fromEntries(Object.entries(data.economy).filter(([k]) => known.includes(k))));
+    }
+    if (data.settings) {
+      const known = Object.keys(useSettings.getState()).filter((k) => typeof (useSettings.getState() as unknown as Record<string, unknown>)[k] !== 'function');
+      useSettings.getState().set(Object.fromEntries(Object.entries(data.settings).filter(([k]) => known.includes(k))));
+    }
+    setPendingImport(null);
+    setImportMsg('Imported. Welcome back.');
   }
 
   const jump = (id: GroupId) => {
@@ -220,6 +252,15 @@ export default function Settings() {
             [1.25, '125%'],
             [1.5, '150%'],
             [2, '200%'],
+          ]}
+        />
+        <Segmented
+          k="uiStyle"
+          label="Look"
+          desc="Soft is the new neumorphic style; Aurora is the original dark look"
+          options={[
+            ['soft', 'Soft'],
+            ['aurora', 'Aurora'],
           ]}
         />
         <Segmented
@@ -315,8 +356,12 @@ export default function Settings() {
       <Group id="rewards">
         <Toggle k="showBoostPicker" label="Offer boosts before a game" desc="Slow-mo and Second Wind, paid with orbs or an optional ad. Boosted runs are scored separately." />
         <ActionRow
-          label="Ads are optional"
-          desc={`Only when you choose one, for a reward. Never forced, never needed to play. ${AD_DAILY_CAP - adsLeft} of ${AD_DAILY_CAP} watched today.`}
+          label={ADS_ENABLED ? 'Ads are optional' : 'No ads'}
+          desc={
+            ADS_ENABLED
+              ? `Only when you choose one, for a reward. Never forced, never needed to play. ${AD_DAILY_CAP - adsLeft} of ${AD_DAILY_CAP} watched today.`
+              : 'No ads are shown right now. Orbs, boosts and cosmetics are earned by playing.'
+          }
         >
           <button className="btn" onClick={() => navigate('/shop')}>
             Open shop
@@ -336,6 +381,17 @@ export default function Settings() {
           ]}
         />
         <Segmented
+          k="rhythmDays"
+          label="Weekly rhythm"
+          desc="Play on a few days each week. The other days are rest days, never a broken streak."
+          options={[
+            [0, 'Off'],
+            [3, '3 days'],
+            [4, '4 days'],
+            [5, '5 days'],
+          ]}
+        />
+        <Segmented
           k="weeklyGoalMin"
           label="Weekly practice goal"
           options={[
@@ -349,10 +405,32 @@ export default function Settings() {
 
       <Group id="data">
         <Toggle k="analytics" label="Share anonymous usage stats" desc="Helps Saksham see which games people enjoy and come back to. A random ID only: no names, emails, cookies or gameplay details." />
+        <ActionRow label="Privacy & terms" desc="What Utopia stores and sends, in plain words">
+          <button className="btn" onClick={() => navigate('/privacy')}>
+            Read
+          </button>
+        </ActionRow>
         <ActionRow label="Your data stays on this device" desc="Progress is stored locally. Export it any time.">
           <button className="btn" onClick={exportData}>
             Export JSON
           </button>
+        </ActionRow>
+        <ActionRow label="Import from a file" desc={importMsg ?? (pendingImport ? `Replace everything on this device with ${pendingImport.label}?` : 'Restore progress from an exported JSON file, e.g. on a new phone.')}>
+          {pendingImport ? (
+            <span className="row">
+              <button className="btn" onClick={() => setPendingImport(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={applyImport}>
+                Replace
+              </button>
+            </span>
+          ) : (
+            <label className="btn">
+              Import JSON
+              <input type="file" accept="application/json,.json" hidden onChange={(e) => void pickImport(e.target.files?.[0])} />
+            </label>
+          )}
         </ActionRow>
         <ActionRow label="Delete my data" desc="Removes all progress, history, orbs and unlocks on this device">
           {confirmDelete ? (
@@ -421,4 +499,12 @@ export default function Settings() {
       </section>
     </div>
   );
+}
+
+interface ImportData {
+  exportedAt?: string;
+  settings?: Record<string, unknown>;
+  progress?: Record<string, import('@/platform/progress').GameProgress>;
+  economy?: Record<string, unknown>;
+  history?: import('@/platform/progress').SessionRecord[];
 }

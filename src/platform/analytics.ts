@@ -20,6 +20,7 @@ export type AnalyticsEvent =
   | { name: 'feedback_click'; from: string }
   | { name: 'landing_cta'; where: string }
   | { name: 'share'; what: string }
+  | { name: 'client_error'; where: string; message: string }
   | { name: 'daily_complete'; day: string }
   | { name: 'star_earned'; game_id: string; stars: number }
   | { name: 'ad_request'; placement: string }

@@ -11,7 +11,8 @@ import { LivePreview, PosterArt, formatScore } from '../components/Common';
 import { AbilityIcon } from '../components/Editorial';
 import { FeedbackButton } from '../components/Feedback';
 import { ABILITY_LABEL, RINGS, ringOf } from '@/platform/abilities';
-import { STAR_HINT, shareText, starText, starsFor, trioStatus } from '@/platform/retention';
+import { STAR_HINT, starText, starsFor, trioStatus } from '@/platform/retention';
+import { shareToday } from '../components/shareCard';
 import { GameInfo } from '../components/GameInfo';
 import { Sheet } from '../components/Sheet';
 import { IconArrowDown, IconArrowUp, IconCalendar, IconHeart, IconInfo, IconPlay, IconSound, IconGrid } from '../components/Icons';
@@ -552,16 +553,8 @@ function TodayCard({ index, active }: { index: number; active: boolean }) {
               className="btn btn-primary btn-lg"
               onClick={async () => {
                 track({ name: 'share', what: 'today' });
-                const text = shareText(st);
-                try {
-                  if (navigator.share) await navigator.share({ text });
-                  else {
-                    await navigator.clipboard.writeText(text);
-                    setShared(true);
-                  }
-                } catch {
-                  /* share sheet dismissed */
-                }
+                const res = await shareToday(st);
+                if (res === 'copied') setShared(true);
               }}
             >
               {shared ? 'Copied ✓' : 'Share my day'}

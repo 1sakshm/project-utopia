@@ -56,6 +56,26 @@ async function fetchBuffer(text: string, lang: VoiceLang, speaker: string, pace:
   return p;
 }
 
+// ---------- cloud STT budget ----------
+/** Seconds of microphone audio per device per day sent to Sarvam (≈ ₹10/day at ₹30 per audio hour). */
+export const STT_DAILY_BUDGET_S = 20 * 60;
+const STT_KEY = 'utopia.sttBudget';
+function sttSecondsToday(): number {
+  try {
+    const v = JSON.parse(localStorage.getItem(STT_KEY) ?? 'null') as { day: string; s: number } | null;
+    return v && v.day === new Date().toISOString().slice(0, 10) ? v.s : 0;
+  } catch {
+    return 0;
+  }
+}
+function addSttSeconds(sec: number) {
+  try {
+    localStorage.setItem(STT_KEY, JSON.stringify({ day: new Date().toISOString().slice(0, 10), s: sttSecondsToday() + sec }));
+  } catch {
+    /* storage blocked: no budget tracking */
+  }
+}
+
 // ---------- device speech fallback ----------
 function deviceSpeak(text: string, lang: VoiceLang, pace: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -286,11 +306,13 @@ export function createVoice(opts: {
       if (opts.preview) return null;
       const lang = o?.lang ?? api.lang();
       const maxMs = o?.maxMs ?? 7000;
-      if (await sarvamAvailable()) {
+      // Daily cloud speech-to-text budget per device: past it, use the browser's own recognizer (free), or typing.
+      if ((await sarvamAvailable()) && sttSecondsToday() < STT_DAILY_BUDGET_S) {
         const wav = await recordUtterance(maxMs, o?.onLevel, opts.signal);
         if (wav === null) return null;
         if (wav === '') return '';
         try {
+          addSttSeconds(wav.size / 32000); // 16 kHz mono 16-bit WAV ≈ 32 KB per second
           const r = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
           if (!r.ok) return null;
           const data = (await r.json()) as { transcript?: string };

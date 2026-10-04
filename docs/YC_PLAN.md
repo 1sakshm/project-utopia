@@ -113,6 +113,15 @@ Shipped in this release:
 Already in place and consistent with the research: per-game adaptive difficulty (the SDK staircase), no streak guilt,
 optional rewards, and accessibility settings applied to every game.
 
+Shipped on 5 Oct, from §10 and `HARSH_REVIEW.md`:
+- Opt-in weekly rhythm (Settings → Wellbeing; a card on Progress after a second day of play).
+- Easier restarts after a break: start 3 levels lower after 3+ days away, 4 lower after 14+ days.
+- Share image card for WhatsApp/Instagram.
+- Import progress from a file.
+- Daily cloud microphone budget (20 min per device, then free on-device recognition).
+- Production ads off until H5 approval.
+- Privacy page.
+
 Next candidates, in priority order (§10): an opt-in weekly rhythm with rest days, at-risk difficulty easing for
 returning players, local feed personalization, an opt-in daily reminder, and a progress backup code.
 

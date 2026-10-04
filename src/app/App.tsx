@@ -11,6 +11,8 @@ import { audioEngine } from '@/runtime/audio';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { IconFeed, IconGrid, IconRings, IconSettings } from './components/Icons';
 import AdHost from './components/AdHost';
+import ErrorBoundary from './components/ErrorBoundary';
+import StorageNotice from './components/StorageNotice';
 import { useEconomy } from '@/platform/economy';
 import { SKINS, THEMES } from '@/platform/shop';
 import '@/styles/rewards.css';
@@ -23,6 +25,7 @@ const About = lazy(() => import('./pages/About'));
 const Lab = lazy(() => import('./pages/Lab'));
 const Shop = lazy(() => import('./pages/Shop'));
 const Landing = lazy(() => import('./pages/Landing'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 const TABS = [
   { path: '/', label: 'Feed', Icon: IconFeed },
@@ -44,6 +47,8 @@ export default function App() {
     root.dataset.contrast = settings.highContrast ? 'high' : 'normal';
     root.dataset.reducedMotion = String(prefersReducedMotion(settings));
     root.dataset.readingFont = settings.readingFont;
+    // High contrast always wins over the soft (neumorphism) look.
+    root.dataset.style = settings.highContrast ? 'aurora' : settings.uiStyle;
     root.style.setProperty('--text-scale', String(settings.textScale));
     audioEngine.apply({ master: settings.master, music: settings.music, sfx: settings.sfx, voice: settings.voice, mono: settings.mono });
     audioEngine.calibrationMs = settings.calibrationMs;
@@ -105,6 +110,7 @@ export default function App() {
   else if (path === '/about') page = <About />;
   else if (path === '/shop') page = <Shop />;
   else if (path === '/welcome') page = <Landing />;
+  else if (path === '/privacy') page = <Privacy />;
   else if (detail) page = <GameDetail id={detail.id} />;
   else if (!onFeed) page = <NotFound />;
 
@@ -140,11 +146,18 @@ export default function App() {
         <Feed hidden={!onFeed || !!play} />
         {page && (
           <div className="page-layer" key={path}>
-            <Suspense fallback={<div className="page"><div className="loader" /></div>}>{page}</Suspense>
+            <ErrorBoundary where={path} onExit={() => navigate('/')}>
+              <Suspense fallback={<div className="page"><div className="loader" /></div>}>{page}</Suspense>
+            </ErrorBoundary>
           </div>
         )}
       </main>
-      {play && <PlayOverlay key={play.id + search} gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} />}
+      {play && (
+        <ErrorBoundary key={play.id + search} where={`play:${play.id}`} onExit={() => navigate('/', { replace: true })}>
+          <PlayOverlay gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} />
+        </ErrorBoundary>
+      )}
+      <StorageNotice />
       <AdHost />
       <BreakReminder paused={!!play} />
       <UpdateToast blocked={!!play} />

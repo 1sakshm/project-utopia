@@ -2,6 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { useEconomy } from '@/platform/economy';
 import { PACKS, SKINS, THEMES, type ShopItem } from '@/platform/shop';
 import { showRewardedAd } from '@/platform/ads';
+import { ADS_ENABLED } from '@/platform/adsConfig';
 import { track } from '@/platform/analytics';
 import { usePlayUi } from '@/platform/play';
 import { Hero, SectionHead, d, useReveal } from '../components/Editorial';
@@ -111,7 +112,7 @@ export default function Shop() {
             </li>
           ))}
         </ul>
-        <p className="fine shop-fine">Ads are always optional: up to 12 a day, and never needed to play any game.</p>
+        {ADS_ENABLED && <p className="fine shop-fine">Ads are always optional: up to 12 a day, and never needed to play any game.</p>}
       </section>
     </div>
   );

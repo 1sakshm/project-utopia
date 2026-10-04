@@ -360,3 +360,53 @@
   line-height: 1.5;
   color: var(--text-2);
 }
+
+/* Weekly rhythm */
+.rhythm-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 20px;
+}
+.rhythm-title {
+  margin: 2px 0 4px;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+.rhythm-sub {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.rhythm-week {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rhythm-week li {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  font-size: 1.1rem;
+  color: var(--text-3);
+}
+.rhythm-week li small {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.rhythm-week li.is-played {
+  color: var(--accent);
+}
+.rhythm-week li.is-rest {
+  color: #ffe08a;
+}
+.rhythm-week li.is-today small {
+  color: var(--text);
+  text-decoration: underline;
+}

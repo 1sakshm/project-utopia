@@ -2,6 +2,14 @@
 
 Status: draft · Owner: Saksham Sharma · Scope: everything between "it works" and "it is excellent".
 
+> **Status (5 Oct 2026):**
+> - **Done:** H4 (production ads off), H5 (error boundaries, safe storage, import), H2 (privacy & terms page), Q6 (README count).
+> - **Partly done:**
+>   - H3: security headers added; no CSP yet.
+>   - H1: a per-IP rate limit (per edge instance) and a daily microphone budget per device. Still to do: a Cloudflare rate-limiting rule for `/api/*` and a Sarvam spending cap.
+>   - Q1: first-visit precache cut from 4.6 MB to 1.6 MB.
+> - **Open:** everything else.
+
 This document is a blunt audit plus a fix plan. Each item says **what is wrong, how we know, the ideal fix,
 and how we will know it is done.** Evidence tags:
 

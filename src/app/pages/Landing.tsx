@@ -276,6 +276,9 @@ export default function Landing() {
           <button className="btn btn-ghost" onClick={() => navigate('/library')}>
             All games
           </button>
+          <button className="btn btn-ghost" onClick={() => navigate('/privacy')}>
+            Privacy
+          </button>
           <a className="btn btn-ghost" href="https://github.com/1sakshm/project-utopia" target="_blank" rel="noreferrer">
             GitHub
           </a>

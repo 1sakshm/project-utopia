@@ -95,3 +95,18 @@ export function shareText(st: TrioStatus): string {
   });
   return [`Project Utopia · Today's 3 · ${date}`, ...lines, '', 'Play today’s games: https://playutopia.pages.dev/?utm_source=share'].join('\n');
 }
+
+/** This week's rhythm (Mon–Sun, local time): which days had at least one finished game. */
+export function weekRhythm(history: Array<{ t: number; ms: number }>, goal: number, now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // back to Monday
+  const played = Array.from({ length: 7 }, (_, i) => {
+    const a = start.getTime() + i * 864e5;
+    return history.some((h) => h.t + h.ms >= a && h.t + h.ms < a + 864e5);
+  });
+  const todayIdx = (now.getDay() + 6) % 7;
+  const days = played.filter(Boolean).length;
+  const restLeft = Math.max(0, 7 - goal - played.slice(0, todayIdx).filter((p) => !p).length);
+  return { played, todayIdx, days, goal, met: goal > 0 && days >= goal, restLeft };
+}

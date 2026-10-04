@@ -2,9 +2,11 @@
 // Local-first (persisted to localStorage). No real money anywhere.
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { safeJSONStorage } from './safeStorage';
 import { createRng, hashString } from '@/sdk/rng';
 import type { RingId } from './abilities';
 import { RINGS } from './abilities';
+import { ADS_ENABLED } from './adsConfig';
 import { DEFAULT_OWNED, ITEM_BY_ID, PACKS, type PackDef } from './shop';
 
 export const AD_DAILY_CAP = 12;
@@ -191,6 +193,7 @@ export const useEconomy = create<EconomyState>()(
         return true;
       },
       canWatchAd() {
+        if (!ADS_ENABLED) return false;
         const a = get().ads;
         return a.day !== utcDay() || a.count < AD_DAILY_CAP;
       },
@@ -236,6 +239,6 @@ export const useEconomy = create<EconomyState>()(
         set(initial());
       },
     }),
-    { name: 'utopia.economy', version: 1 },
+    { name: 'utopia.economy', version: 1, storage: safeJSONStorage() },
   ),
 );

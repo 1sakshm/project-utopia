@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { safeJSONStorage } from './safeStorage';
 
 export interface SessionRecord {
   id: string;
@@ -76,12 +77,18 @@ export const useProgress = create<ProgressStore>()(
       },
       clearAll: () => set({ games: {}, history: [] }),
     }),
-    { name: 'utopia.progress', version: 1 },
+    { name: 'utopia.progress', version: 1, storage: safeJSONStorage() },
   ),
 );
 
 /** Suggested start level: a little below the last level reached (warm-up). */
-export function startLevelFor(id: string): number {
+/**
+ * Where a run starts: a little below last time. Coming back after a break eases in further, because players at
+ * risk of churning stay longer when early levels are easier (Ascarza et al. 2025; see docs/YC_PLAN.md §2.2).
+ */
+export function startLevelFor(id: string, now = Date.now()): number {
   const g = useProgress.getState().get(id);
-  return Math.max(1, (g.lastLevel || 1) - 2);
+  const daysAway = g.lastPlayed ? (now - g.lastPlayed) / 864e5 : 0;
+  const ease = daysAway >= 14 ? 4 : daysAway >= 3 ? 3 : 2;
+  return Math.max(1, (g.lastLevel || 1) - ease);
 }

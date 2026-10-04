@@ -19,7 +19,8 @@ import { useEconomy, type SessionRewards } from '@/platform/economy';
 import { showRewardedAd } from '@/platform/ads';
 import { BOOST_ORB_PRICE } from '@/platform/shop';
 import { ABILITY_RING } from '@/platform/abilities';
-import { nextUp, shareText, starText, starsFor, trioStatus, type TrioStatus } from '@/platform/retention';
+import { nextUp, starText, starsFor, trioStatus, type TrioStatus } from '@/platform/retention';
+import { shareToday } from './shareCard';
 
 type Phase = 'loading' | 'boost' | 'howto' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
 type BoostKind = 'slowmo' | 'secondWind';
@@ -511,7 +512,10 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
             </h2>
             <p className="muted">
               If you use the microphone, your recording is sent to Sarvam AI to turn your speech into text. Utopia doesn’t store it. You can
-              always type instead, and change this later in Settings → Voice.
+              always type instead, and change this later in Settings → Voice.{' '}
+              <a href="/privacy" target="_blank" rel="noreferrer">
+                Privacy
+              </a>
             </p>
             <div className="row">
               <button className="btn" onClick={() => voiceAsk('typing')}>
@@ -718,16 +722,8 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
               className="btn btn-ghost"
               onClick={async () => {
                 track({ name: 'share', what: 'today' });
-                const text = shareText(r.trio!);
-                try {
-                  if (navigator.share) await navigator.share({ text });
-                  else {
-                    await navigator.clipboard.writeText(text);
-                    setShared(true);
-                  }
-                } catch {
-                  /* dismissed */
-                }
+                const res = await shareToday(r.trio!);
+                if (res === 'copied') setShared(true);
               }}
             >
               {shared ? 'Copied ✓' : 'Share'}

@@ -258,3 +258,30 @@
 :root[data-reduced-motion='true'] .ab-underline path {
   stroke-dashoffset: 0;
 }
+
+/* Privacy page */
+.privacy-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.privacy-list b {
+  color: var(--text);
+}
+.privacy-body h3 {
+  margin: 26px 0 8px;
+  font-size: 1.1rem;
+}
+.privacy-body p {
+  margin: 0;
+  max-width: 70ch;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.privacy-body a {
+  color: var(--accent);
+}

@@ -1,6 +1,7 @@
-# Project Utopia — V1
+# Project Utopia
 
-A reels-style, web-first arcade of 20 short, beautiful games, each designed around a cognitive ability
+A reels-style, web-first arcade of short, beautiful games (30 and growing, 10 of them voice games in English and
+Hindi), each designed around a cognitive ability
 (memory, attention, perception, reasoning, language, flexibility, timing, calm). Scroll live previews, tap **Play**,
 tap **Exit**, and land back on the exact card you left.
 
