@@ -312,3 +312,51 @@
 .pr-best:is(:hover, :focus-visible) .pr-best-glyph .ab-glyph * {
   animation-play-state: running;
 }
+
+/* Stars by ability */
+.pr-stars {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.pr-star-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+.pr-star-glyph {
+  width: 34px;
+  height: 34px;
+}
+.pr-star-label {
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.pr-star-n {
+  font-size: 1.9rem;
+  line-height: 1;
+}
+.pr-star-n small {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffe08a;
+}
+.pr-star-bar {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.pr-star-bar i {
+  display: block;
+  height: 100%;
+  background: var(--c);
+}
+.pr-ios-hint {
+  margin: 12px 0 0;
+  padding: 14px 18px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}

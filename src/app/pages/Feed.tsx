@@ -11,6 +11,7 @@ import { LivePreview, PosterArt, formatScore } from '../components/Common';
 import { AbilityIcon } from '../components/Editorial';
 import { FeedbackButton } from '../components/Feedback';
 import { ABILITY_LABEL, RINGS, ringOf } from '@/platform/abilities';
+import { STAR_HINT, shareText, starText, starsFor, trioStatus } from '@/platform/retention';
 import { GameInfo } from '../components/GameInfo';
 import { Sheet } from '../components/Sheet';
 import { IconArrowDown, IconArrowUp, IconCalendar, IconHeart, IconInfo, IconPlay, IconSound, IconGrid } from '../components/Icons';
@@ -281,7 +282,7 @@ export default function Feed({ hidden }: { hidden: boolean }) {
             <span className="coach-swipe" aria-hidden>
               <IconArrowUp />
             </span>
-            <span>Swipe up to discover · Tap <b>Play</b> to play</span>
+            <span>Swipe up for more games</span>
           </button>
         )}
         <div className="feed-nav-desktop">
@@ -358,6 +359,7 @@ const FeedCard = memo(function FeedCard({
   onNext: () => void;
 }) {
   if (item.type === 'end') return <EndCard cycle={item.cycle} index={index} active={active} onNext={onNext} />;
+  if (item.type === 'today') return <TodayCard index={index} active={active} />;
   return <GameCard item={item} index={index} total={total} active={active} near={near} onInfo={onInfo} />;
 });
 
@@ -460,7 +462,13 @@ function GameCard({
         <div className="card-stats">
           <span className="card-stat">{m.sessionLabel}</span>
           {m.showScore !== false && best > 0 && <span className="card-stat is-best">Best {formatScore(best)}</span>}
-          {!prog?.sessions && <span className="card-stat is-new">New</span>}
+          {!prog?.sessions ? (
+            <span className="card-stat is-new">New</span>
+          ) : (
+            <span className="card-stat is-stars" title={STAR_HINT(m.id)} aria-label={`${starsFor(m.id, prog)} of 3 stars`}>
+              {starText(starsFor(m.id, prog))}
+            </span>
+          )}
         </div>
       </div>
       <button
@@ -491,6 +499,82 @@ function FeedTitle({ title, as: Tag = 'h2', className = '' }: { title: string; a
         </span>
       ))}
     </Tag>
+  );
+}
+
+/** "Today's 3": the same three games for everyone today, with progress and a share button when done. */
+function TodayCard({ index, active }: { index: number; active: boolean }) {
+  const games = useProgress((s) => s.games);
+  const st = trioStatus(games);
+  const [shared, setShared] = useState(false);
+  const nextIdx = st.done.findIndex((d) => !d);
+  const reset = (() => {
+    const now = new Date();
+    const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const mins = Math.max(1, Math.round((end - now.getTime()) / 60000));
+    return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+  })();
+  return (
+    <article className={`card card-today ${active ? 'is-active' : ''}`} data-feed-index={index} aria-label={`Today's 3: ${st.count} of 3 played`}>
+      <div className="ab-aurora end-aurora" aria-hidden>
+        <i className="b1" />
+        <i className="b2" />
+        <i className="b3" />
+      </div>
+      <div className="today-inner">
+        <p className="ab-kicker">
+          <span className="ab-orb" aria-hidden /> Today’s 3 · same for everyone
+        </p>
+        <FeedTitle title={st.complete ? 'All three, done.' : 'Three little worlds for today.'} className="end-title" />
+        <ol className="today-list">
+          {st.ids.map((id, i) => {
+            const m = GAME_BY_ID[id].manifest;
+            const ring = ringOf(m.abilities.primary);
+            return (
+              <li key={id}>
+                <button className={`today-game ${st.done[i] ? 'is-done' : ''}`} onClick={() => openGame(id, 'daily', null)} aria-label={`${m.title}${st.done[i] ? ', done' : ''}`}>
+                  <span className="today-poster" style={{ backgroundImage: `url(/posters/${id}.jpg)` }} aria-hidden />
+                  <span className="today-text">
+                    <small>
+                      <AbilityIcon id={ring.id} color={ring.color} size={16} live={active} /> {ABILITY_LABEL[m.abilities.primary]}
+                    </small>
+                    <b>{m.title}</b>
+                  </span>
+                  <span className="today-state">{st.done[i] ? `✓ ${formatScore(st.scores[i])}` : '▶'}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="today-actions">
+          {st.complete ? (
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={async () => {
+                track({ name: 'share', what: 'today' });
+                const text = shareText(st);
+                try {
+                  if (navigator.share) await navigator.share({ text });
+                  else {
+                    await navigator.clipboard.writeText(text);
+                    setShared(true);
+                  }
+                } catch {
+                  /* share sheet dismissed */
+                }
+              }}
+            >
+              {shared ? 'Copied ✓' : 'Share my day'}
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-lg" onClick={() => openGame(st.ids[nextIdx], 'daily', null)}>
+              <IconPlay width={18} height={18} /> {st.count === 0 ? 'Start today’s 3' : `Play ${st.count + 1} of 3`}
+            </button>
+          )}
+          <p className="today-fine">New games in {reset}. Missing a day costs nothing.</p>
+        </div>
+      </div>
+    </article>
   );
 }
 

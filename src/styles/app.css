@@ -1691,3 +1691,171 @@ kbd {
   line-height: 1.55;
   margin: 0 0 18px;
 }
+
+/* ================= UI pass (Oct 2026): quieter chrome, the game leads ================= */
+/* Coach mark: a small pill at the top of the card, never over the middle of the preview. */
+.coach {
+  top: calc(18px + var(--safe-top));
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  background: rgba(8, 10, 20, 0.55);
+}
+/* Play: tinted with the game's own colors instead of a bright white slab. */
+.card-play {
+  left: 20px;
+  right: 80px;
+  min-height: 52px;
+  padding: 0 22px;
+  font-size: 1.02rem;
+  color: #0e0b1c;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--acc, #b99cff) 62%, #fff), color-mix(in srgb, var(--acc2, #6fe3ff) 48%, #fff));
+}
+:root[data-contrast='high'] .card-play {
+  background: #fff;
+}
+/* Side rail: smaller, translucent, pushed to the edge. */
+.card-rail {
+  right: 12px;
+  bottom: 24px;
+  gap: 10px;
+}
+.card-rail .icon-btn {
+  width: 44px;
+  height: 44px;
+  background: rgba(8, 10, 20, 0.32);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.card-meta {
+  bottom: 92px;
+}
+
+/* In-game top bar: fewer, smaller controls. */
+.play-top .icon-btn {
+  width: 44px;
+  height: 44px;
+  background: rgba(8, 10, 20, 0.35);
+}
+.results-actions .row .btn {
+  white-space: nowrap;
+}
+
+/* Compact page headers: content starts in the top third of a phone screen. */
+@media (max-width: 700px) {
+  .ab-hero.is-compact {
+    padding: calc(28px + var(--safe-top)) 20px 8px;
+  }
+  .is-compact .ab-title {
+    font-size: clamp(2.1rem, 9vw, 2.8rem);
+  }
+  .is-compact .ab-kicker {
+    margin-bottom: 8px;
+  }
+  .is-compact .ab-lead {
+    margin-top: 8px;
+    font-size: 0.98rem;
+  }
+  .is-compact .ab-hero-extra {
+    margin-top: 16px;
+  }
+  .ab-section {
+    padding-top: 36px;
+  }
+  .ab-section.is-tight {
+    padding-top: 16px;
+  }
+  .ab-head {
+    margin-bottom: 18px;
+  }
+}
+
+/* ================= Today's 3 card ================= */
+.card-today {
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  isolation: isolate;
+}
+.today-inner {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  padding: 24px 20px;
+}
+.today-inner .ab-kicker {
+  margin-bottom: 12px;
+}
+.today-list {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.today-game {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 12, 22, 0.5);
+  backdrop-filter: blur(10px);
+  text-align: left;
+  color: var(--text);
+}
+.today-game.is-done {
+  border-color: rgba(141, 255, 196, 0.4);
+}
+.today-poster {
+  width: 54px;
+  height: 72px;
+  flex: none;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+}
+.today-text {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.today-text small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.today-text b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.3rem;
+}
+.today-state {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.is-done .today-state {
+  color: #8dffc4;
+}
+.today-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.today-fine {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+.card-stat.is-stars {
+  color: #ffe08a;
+  letter-spacing: 0.1em;
+}

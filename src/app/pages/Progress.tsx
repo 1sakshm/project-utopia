@@ -9,6 +9,7 @@ import { AbilityGlyph, CountUp, Hero, SectionHead, d, useReveal } from '../compo
 import { useEconomy, levelProgress, questsFor, utcDay } from '@/platform/economy';
 import { track } from '@/platform/analytics';
 import Wallet from '../components/Wallet';
+import { starsByRing } from '@/platform/retention';
 import '@/styles/progress.css';
 
 /** Sparkline that draws itself when its [data-reveal] ancestor becomes visible. */
@@ -44,6 +45,18 @@ function Ring({ value, color, size = 96 }: { value: number; color: string; size?
       {/* no arc at all when empty: a zero-length round-capped stroke still renders as a dot */}
       {v > 0.005 && <circle cx={size / 2} cy={size / 2} r={r} className="pr-ring-arc" transform={`rotate(-90 ${size / 2} ${size / 2})`} />}
     </svg>
+  );
+}
+
+/** iPhone Safari deletes site storage after 7 days without a visit unless the app is on the Home Screen. */
+function IosKeepHint() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone;
+  if (!ios || standalone) return null;
+  return (
+    <p className="ed-card pr-ios-hint">
+      <b>Keep your progress on iPhone:</b> tap Share, then “Add to Home Screen”. Safari can clear saved progress for sites you haven’t visited in a week.
+    </p>
   );
 }
 
@@ -190,6 +203,26 @@ export default function Progress() {
 
       <section className="ab-section is-tight">
         <ProfileCard />
+        <IosKeepHint />
+      </section>
+
+      <section className="ab-section">
+        <SectionHead eyebrow="Mastery" title="Stars by ability" sub="Every game has three stars. Finish a round for the first; the others come from reaching deeper levels." />
+        <div className="pr-stars">
+          {starsByRing(games).map(({ ring, earned, max }, i) => (
+            <div key={ring.id} className="ed-card pr-star-card" data-reveal style={{ ...d(i % 4, 70), '--c': ring.color } as CSSProperties}>
+              <AbilityGlyph id={ring.id} className="pr-star-glyph" />
+              <span className="pr-star-label">{ring.label}</span>
+              <span className="pr-star-n display">
+                {earned}
+                <small>/{max} ★</small>
+              </span>
+              <span className="pr-star-bar" aria-hidden>
+                <i style={{ width: `${max ? (earned / max) * 100 : 0}%` }} />
+              </span>
+            </div>
+          ))}
+        </div>
       </section>
 
       {goal > 0 && (

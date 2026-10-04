@@ -6,7 +6,8 @@ import { useSettings } from './settings';
 
 export type FeedItem =
   | { key: string; type: 'game'; gameId: string; variant: 'normal' | 'daily'; cycle: number }
-  | { key: string; type: 'end'; cycle: number };
+  | { key: string; type: 'end'; cycle: number }
+  | { key: string; type: 'today' };
 
 const ringOfId = (id: string) => ABILITY_RING[GAME_BY_ID[id].manifest.abilities.primary];
 
@@ -39,6 +40,9 @@ export function computeOrder(): string[] {
 function buildItems(order: string[]): FeedItem[] {
   const items: FeedItem[] = [];
   order.forEach((id) => items.push({ key: `0:${id}`, type: 'game', gameId: id, variant: 'normal', cycle: 0 }));
+  // "Today's 3" is the front door for returning players; new players see two games first (time to first fun).
+  const returning = Object.values(useProgress.getState().games).some((g) => g.sessions > 0);
+  items.splice(returning ? 0 : 2, 0, { key: 'today', type: 'today' });
   items.push({ key: 'end:0', type: 'end', cycle: 0 });
   order.forEach((id) => items.push({ key: `1:${id}`, type: 'game', gameId: id, variant: 'daily', cycle: 1 }));
   items.push({ key: 'end:1', type: 'end', cycle: 1 });

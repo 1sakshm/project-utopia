@@ -8,7 +8,7 @@ import { useSettings } from './settings';
  * (no cookies), no names, emails or per-trial gameplay data. Honors the browser's Do Not Track.
  */
 export type AnalyticsEvent =
-  | { name: 'app_open'; is_pwa: boolean; tier?: string; reduced_motion: boolean }
+  | { name: 'app_open'; is_pwa: boolean; tier?: string; reduced_motion: boolean; days_since_first?: number; total_sessions?: number; returning?: boolean }
   | { name: 'feed_card_impression'; game_id: string; position: number; variant: string; preview_mode: string; dwell_ms: number }
   | { name: 'feed_card_action'; game_id: string; action: 'play' | 'info' | 'favorite' | 'sound' }
   | { name: 'game_load'; game_id: string; tti_ms: number; from: string }
@@ -18,6 +18,10 @@ export type AnalyticsEvent =
   | { name: 'setting_changed'; key: string; value: string }
   | { name: 'wellbeing_reminder'; action: 'shown' | 'dismiss' | 'still-water' }
   | { name: 'feedback_click'; from: string }
+  | { name: 'landing_cta'; where: string }
+  | { name: 'share'; what: string }
+  | { name: 'daily_complete'; day: string }
+  | { name: 'star_earned'; game_id: string; stars: number }
   | { name: 'ad_request'; placement: string }
   | { name: 'ad_result'; placement: string; result: string }
   | { name: 'reward'; source: 'session' | 'quest' | 'double'; orbs: number }

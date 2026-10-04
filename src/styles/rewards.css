@@ -482,3 +482,92 @@
   margin-top: 14px;
   text-align: center;
 }
+
+/* Results: the score lands first, rewards follow. */
+.results .rewards {
+  animation: ab-fade-in-from 0.6s var(--ease) 0.9s both;
+}
+.results .rewards .reward-chip {
+  animation-delay: 1s;
+}
+.results .double-btn {
+  animation: ab-fade-in-from 0.5s var(--ease) 1.4s both;
+}
+.rewards .wallet {
+  min-height: 34px;
+  padding: 0 12px 0 4px;
+  font-size: 0.88rem;
+}
+.rewards .wallet .coin {
+  width: 22px;
+  height: 22px;
+}
+
+/* Results: stars, today's 3, up next */
+.results-stars {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 1.3rem;
+  letter-spacing: 0.12em;
+  color: #ffe08a;
+}
+.results-stars em {
+  font-style: normal;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 224, 138, 0.14);
+  border: 1px solid rgba(255, 224, 138, 0.45);
+}
+.results-stars.is-new span {
+  animation: pop 0.7s var(--ease) 0.4s both;
+  text-shadow: 0 0 16px rgba(255, 224, 138, 0.7);
+}
+.results-trio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-2);
+}
+.results-trio-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.results-trio-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+.results-trio-dots i.on {
+  background: #8dffc4;
+  box-shadow: 0 0 10px rgba(141, 255, 196, 0.7);
+}
+.results-next span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+  min-width: 0;
+}
+.results-next small {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.results-next {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

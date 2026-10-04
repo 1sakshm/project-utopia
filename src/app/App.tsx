@@ -4,6 +4,7 @@ import Feed, { openGame } from './pages/Feed';
 import PlayOverlay from './components/PlayOverlay';
 import { useSettings, prefersReducedMotion } from '@/platform/settings';
 import { usePlayUi } from '@/platform/play';
+import { useProgress } from '@/platform/progress';
 import { track, trackPage } from '@/platform/analytics';
 import { loadPosters } from '@/platform/posters';
 import { audioEngine } from '@/runtime/audio';
@@ -21,6 +22,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Lab = lazy(() => import('./pages/Lab'));
 const Shop = lazy(() => import('./pages/Shop'));
+const Landing = lazy(() => import('./pages/Landing'));
 
 const TABS = [
   { path: '/', label: 'Feed', Icon: IconFeed },
@@ -63,7 +65,21 @@ export default function App() {
 
   useEffect(() => {
     void loadPosters(GAMES.map((g) => g.manifest.id));
-    track({ name: 'app_open', is_pwa: window.matchMedia('(display-mode: standalone)').matches, reduced_motion: prefersReducedMotion() });
+    // Anonymous retention signals for D1/D7 cohorts: days since this device first opened Utopia.
+    let first = Number(localStorage.getItem('utopia.firstSeen'));
+    if (!first) {
+      first = Date.now();
+      localStorage.setItem('utopia.firstSeen', String(first));
+    }
+    const totalSessions = Object.values(useProgress.getState().games).reduce((n, g) => n + g.sessions, 0);
+    track({
+      name: 'app_open',
+      is_pwa: window.matchMedia('(display-mode: standalone)').matches,
+      reduced_motion: prefersReducedMotion(),
+      days_since_first: Math.floor((Date.now() - first) / 864e5),
+      total_sessions: totalSessions,
+      returning: totalSessions > 0,
+    });
   }, []);
 
   // Page view per route (the play overlay counts as its own page).
@@ -88,6 +104,7 @@ export default function App() {
   else if (path === '/settings') page = <Settings />;
   else if (path === '/about') page = <About />;
   else if (path === '/shop') page = <Shop />;
+  else if (path === '/welcome') page = <Landing />;
   else if (detail) page = <GameDetail id={detail.id} />;
   else if (!onFeed) page = <NotFound />;
 

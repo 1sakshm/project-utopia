@@ -19,6 +19,7 @@ import { useEconomy, type SessionRewards } from '@/platform/economy';
 import { showRewardedAd } from '@/platform/ads';
 import { BOOST_ORB_PRICE } from '@/platform/shop';
 import { ABILITY_RING } from '@/platform/abilities';
+import { nextUp, shareText, starText, starsFor, trioStatus, type TrioStatus } from '@/platform/retention';
 
 type Phase = 'loading' | 'boost' | 'howto' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
 type BoostKind = 'slowmo' | 'secondWind';
@@ -30,6 +31,11 @@ interface ResultInfo {
   statPbs: Record<string, boolean>;
   assisted: boolean;
   rewards: SessionRewards;
+  starsBefore: number;
+  starsAfter: number;
+  /** Today's 3 progress, when this was one of today's daily games. */
+  trio: TrioStatus | null;
+  nextId: string | null;
 }
 
 export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: boolean }) {
@@ -149,7 +155,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     });
     host.current = h;
     // DEV-only hooks for end-to-end tests (end a run / offer a second chance without playing it out).
-    if (import.meta.env.DEV) (window as unknown as { __utopiaPlay?: object }).__utopiaPlay = { end: (sm: SessionSummary) => finish(sm, h), revive: onRevive };
+    if (import.meta.env.DEV) (window as unknown as { __utopiaPlay?: object }).__utopiaPlay = { id: gameId, end: (sm: SessionSummary) => finish(sm, h), revive: onRevive };
     h.ready.then(() => {
       if (host.current !== h) return;
       setReady(true);
@@ -161,6 +167,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     return () => {
       host.current = null;
       h.destroy();
+      if (import.meta.env.DEV) delete (window as unknown as { __utopiaPlay?: object }).__utopiaPlay;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mod, runId, daily, boosts]);
@@ -263,6 +270,8 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       }
     }
     const ms = Math.round(h.elapsed());
+    const starsBefore = starsFor(gameId, prog);
+    const trioBefore = trioStatus();
     const patch: Partial<GameProgress> = {
       bestStats,
       highestLevel: Math.max(prog.highestLevel, s.levelReached),
@@ -306,7 +315,15 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       ms,
     });
     track({ name: 'reward', source: 'session', orbs: rewards.orbs });
-    setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards });
+    const starsAfter = starsFor(gameId, store.get(gameId));
+    if (starsAfter > starsBefore) track({ name: 'star_earned', game_id: gameId, stars: starsAfter });
+    const trioAfter = trioStatus();
+    const trio = daily && trioAfter.ids.includes(gameId) ? trioAfter : null;
+    if (trioAfter.complete && !trioBefore.complete) track({ name: 'daily_complete', day: trioAfter.day });
+    // Ask the browser to keep our storage (Safari clears script storage after 7 days without a visit otherwise).
+    void navigator.storage?.persist?.().catch(() => false);
+    const nextId = trio && !trio.complete ? trio.ids[trio.done.findIndex((d) => !d)] : nextUp(gameId);
+    setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards, starsBefore, starsAfter, trio, nextId });
     go('results');
     say(`Session complete. ${m.showScore !== false ? `Score ${s.score}.` : ''} ${isPb ? 'New personal best!' : ''}`);
     if (isPb) audioEngine.uiPlay();
@@ -353,6 +370,12 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
 
   function nextGame() {
     track({ name: 'game_action', game_id: gameId, action: 'next_game' });
+    const next = result?.nextId;
+    if (next) {
+      const toDaily = !!result?.trio && !result.trio.complete;
+      navigate(`/play/${next}${toDaily ? '?daily=1' : ''}`, { replace: true });
+      return;
+    }
     doExit(() => {
       window.setTimeout(() => {
         const f = useFeed.getState();
@@ -531,7 +554,6 @@ function Hud({ hud, showScore }: { hud: HudState; showScore: boolean }) {
             {formatScore(hud.score)}
           </span>
         )}
-        {hud.level !== undefined && <span className="hud-pill">Lv {hud.level}</span>}
         {hud.timer !== undefined && <span className="hud-pill">{formatTime(hud.timer)}</span>}
         {hud.lives !== undefined && hud.maxLives !== undefined && (
           <span className="hud-lives" aria-label={`${hud.lives} of ${hud.maxLives} lives`}>
@@ -642,9 +664,10 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
   const s = r.summary;
   const showScore = m.showScore !== false;
   const delta = s.score - r.prevBest;
-  const line =
-    s.message ??
-    (r.isPb ? (r.assisted ? 'A new boosted best. Nice run.' : 'A new personal best. Lovely.') : delta > -20 && r.prevBest > 0 ? 'Right on the edge of your best.' : 'Every round sharpens the next.');
+  const line = s.message ?? resultLine(r, delta, s.levelReached);
+  const nextM = r.nextId ? GAME_BY_ID[r.nextId]?.manifest : null;
+  const trioNext = !!r.trio && !r.trio.complete;
+  const [shared, setShared] = useState(false);
   return (
     <div className="glass-card results">
       <p className="eyebrow">{m.title}</p>
@@ -676,19 +699,75 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
         )}
       </div>
       <p className="results-line">{line}</p>
+      {r.starsAfter > 0 && (
+        <p className={`results-stars ${r.starsAfter > r.starsBefore ? 'is-new' : ''}`} aria-label={`${r.starsAfter} of 3 stars${r.starsAfter > r.starsBefore ? ', new star' : ''}`}>
+          <span aria-hidden>{starText(r.starsAfter)}</span>
+          {r.starsAfter > r.starsBefore && <em>New star!</em>}
+        </p>
+      )}
+      {r.trio && (
+        <div className="results-trio">
+          <span className="results-trio-dots" aria-hidden>
+            {r.trio.done.map((d, i) => (
+              <i key={i} className={d ? 'on' : ''} />
+            ))}
+          </span>
+          <span>{r.trio.complete ? 'Today’s 3 complete. See you tomorrow.' : `Today’s 3 · ${r.trio.count} of 3`}</span>
+          {r.trio.complete && (
+            <button
+              className="btn btn-ghost"
+              onClick={async () => {
+                track({ name: 'share', what: 'today' });
+                const text = shareText(r.trio!);
+                try {
+                  if (navigator.share) await navigator.share({ text });
+                  else {
+                    await navigator.clipboard.writeText(text);
+                    setShared(true);
+                  }
+                } catch {
+                  /* dismissed */
+                }
+              }}
+            >
+              {shared ? 'Copied ✓' : 'Share'}
+            </button>
+          )}
+        </div>
+      )}
       <RewardsRow rewards={r.rewards} />
       <div className="results-actions">
-        <button className="btn btn-primary btn-lg" onClick={onAgain} autoFocus>
-          <IconRestart width={18} height={18} /> Play again
-        </button>
+        {trioNext && nextM ? (
+          <button className="btn btn-primary btn-lg" onClick={onNext} autoFocus>
+            Next: {nextM.title} <IconNext width={18} height={18} />
+          </button>
+        ) : (
+          <button className="btn btn-primary btn-lg" onClick={onAgain} autoFocus>
+            <IconRestart width={18} height={18} /> Play again
+          </button>
+        )}
         <div className="row">
-          <button className="btn" onClick={onExit}>
+          <button className="btn" onClick={trioNext ? onAgain : onExit}>
+            {trioNext ? 'Play again' : 'Exit to feed'}
+          </button>
+          {!trioNext && (
+            <button className="btn results-next" onClick={onNext}>
+              {nextM ? (
+                <span>
+                  <small>Up next</small> {nextM.title}
+                </span>
+              ) : (
+                'Next game'
+              )}
+              <IconNext width={18} height={18} />
+            </button>
+          )}
+        </div>
+        {trioNext && (
+          <button className="btn btn-ghost" onClick={onExit}>
             Exit to feed
           </button>
-          <button className="btn" onClick={onNext}>
-            Next game <IconNext width={18} height={18} />
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -892,4 +971,13 @@ function RewardsRow({ rewards }: { rewards: SessionRewards }) {
       {rewards.questsCompleted.length > 0 && <p className="fine">Claim quest rewards in Progress.</p>}
     </>
   );
+}
+
+/** Results copy that says something specific, with a little variety. */
+function resultLine(r: ResultInfo, delta: number, level: number): string {
+  const pick = (arr: string[]) => arr[(r.summary.score + level) % arr.length];
+  if (r.isPb) return r.assisted ? 'A new boosted best. Nice run.' : pick(['A new personal best. Lovely.', 'Your best yet. That one’s yours.', 'New best. Something clicked.']);
+  if (r.prevBest > 0 && delta > -20) return pick(['Right on the edge of your best.', `Just ${Math.max(1, -delta)} short of your best.`]);
+  if (level >= 4) return pick([`You reached level ${level}.`, `Level ${level}. The game is meeting you there.`]);
+  return pick(['Every round sharpens the next.', 'Good warm-up. The next one will feel easier.', 'Nice. Try it once more, or wander somewhere new.']);
 }
