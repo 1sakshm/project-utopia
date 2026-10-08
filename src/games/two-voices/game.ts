@@ -5,7 +5,7 @@ import { createPixiApp, createParticles, glowTexture, gradientTexture, softTileP
 import { createLangToggle } from '@/sdk/voiceui';
 import { UI, WORDS } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const EMOJI_FONT = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 const TRIALS = 16;
 

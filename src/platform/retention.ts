@@ -110,3 +110,41 @@ export function weekRhythm(history: Array<{ t: number; ms: number }>, goal: numb
   const restLeft = Math.max(0, 7 - goal - played.slice(0, todayIdx).filter((p) => !p).length);
   return { played, todayIdx, days, goal, met: goal > 0 && days >= goal, restLeft };
 }
+
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+
+/**
+ * Daily streak with a built-in freeze: one missed day per 7 is forgiven automatically (an "emergency reserve",
+ * which research links to more persistence after a miss; see docs/YC_PLAN.md §2.2). Today never breaks a streak:
+ * if you haven't played yet, it's still alive until midnight.
+ */
+export function computeStreak(history: Array<{ t: number; ms: number }>, now = new Date()) {
+  const played = new Set(history.map((h) => dayKey(new Date(h.t + h.ms))));
+  const day = new Date(now);
+  day.setHours(12, 0, 0, 0);
+  const playedToday = played.has(dayKey(day));
+  let days = 0;
+  let lastFreeze = -99; // index (days back) of the last freeze used
+  let freezeUsedThisWeek = false;
+  for (let i = 0; i < 400; i++) {
+    const d = new Date(day);
+    d.setDate(day.getDate() - i);
+    if (played.has(dayKey(d))) {
+      days++;
+      continue;
+    }
+    if (i === 0) continue; // today isn't over yet
+    if (days > 0 && i - lastFreeze >= 7 && played.has(dayKey(new Date(d.getTime() - 864e5)))) {
+      lastFreeze = i;
+      if (i < 7) freezeUsedThisWeek = true;
+      continue;
+    }
+    break;
+  }
+  const week = Array.from({ length: 7 }, (_, k) => {
+    const d = new Date(day);
+    d.setDate(day.getDate() - (6 - k));
+    return { label: 'SMTWTFS'[d.getDay()], played: played.has(dayKey(d)), today: k === 6 };
+  });
+  return { days, playedToday, freezeReady: !freezeUsedThisWeek, week };
+}

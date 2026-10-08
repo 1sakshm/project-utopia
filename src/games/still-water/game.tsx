@@ -105,7 +105,7 @@ export default function create(ctx: GameContext): GameInstance {
   function showSetup() {
     const el = document.createElement('div');
     el.style.cssText =
-      'position:absolute;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(360px,92%);padding:18px 16px 14px;border-radius:24px;background:rgba(6,10,28,0.72);border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;text-align:center;font-family:Manrope,system-ui,sans-serif;z-index:6;';
+      'position:absolute;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(360px,92%);padding:18px 16px 14px;border-radius:24px;background:rgba(6,10,28,0.72);border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;text-align:center;font-family:"Geist Variable",system-ui,sans-serif;z-index:6;';
     el.addEventListener('pointerdown', (e) => e.stopPropagation());
     const title = document.createElement('div');
     title.textContent = 'Still Water';

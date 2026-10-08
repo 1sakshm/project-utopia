@@ -6,7 +6,7 @@ import { similarity, words } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { LEVEL_NAMES, PROMPTS } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const PROMPT_COUNT = 10;
 const PERFECT = 0.85;
 const CLOSE = 0.6;

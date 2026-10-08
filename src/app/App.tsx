@@ -11,6 +11,10 @@ import { audioEngine } from '@/runtime/audio';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { IconFeed, IconGrid, IconRings, IconSettings } from './components/Icons';
 import AdHost from './components/AdHost';
+import Home from './pages/Home';
+import { House } from 'lucide-react';
+
+const IconHome = () => <House size={22} strokeWidth={2} aria-hidden />;
 import ErrorBoundary from './components/ErrorBoundary';
 import StorageNotice from './components/StorageNotice';
 import { useEconomy } from '@/platform/economy';
@@ -28,7 +32,8 @@ const Landing = lazy(() => import('./pages/Landing'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 
 const TABS = [
-  { path: '/', label: 'Feed', Icon: IconFeed },
+  { path: '/', label: 'Home', Icon: IconHome },
+  { path: '/feed', label: 'Play', Icon: IconFeed },
   { path: '/library', label: 'Library', Icon: IconGrid },
   { path: '/progress', label: 'Progress', Icon: IconRings },
   { path: '/settings', label: 'Settings', Icon: IconSettings },
@@ -39,6 +44,7 @@ export default function App() {
   const search = useRoute((s) => s.search);
   const settings = useSettings();
   const announce = usePlayUi((s) => s.announce);
+  const feedSeen = useRef(false);
   const equipped = useEconomy((s) => s.equipped);
 
   // Reflect settings globally (CSS + audio).
@@ -101,10 +107,15 @@ export default function App() {
   }
 
   const play = matchPath('/play/:id', path);
+  // The feed (and the live game previews inside it) only mounts once it's first opened, then stays mounted so
+  // scroll position and previews survive navigation.
+  if (path === '/feed') feedSeen.current = true;
+  const feedMounted = feedSeen.current;
   const detail = matchPath('/game/:id', path);
-  const onFeed = path === '/' || !!play;
+  const onFeed = path === '/feed';
   let page: React.ReactNode = null;
-  if (path === '/library') page = <Library />;
+  if (path === '/') page = <Home />;
+  else if (path === '/library') page = <Library />;
   else if (path === '/progress') page = <Progress />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/about') page = <About />;
@@ -112,7 +123,7 @@ export default function App() {
   else if (path === '/welcome') page = <Landing />;
   else if (path === '/privacy') page = <Privacy />;
   else if (detail) page = <GameDetail id={detail.id} />;
-  else if (!onFeed) page = <NotFound />;
+  else if (!onFeed && !play) page = <NotFound />;
 
   return (
     <div className={`app ${play ? 'is-playing' : ''}`}>
@@ -125,7 +136,7 @@ export default function App() {
           <span className="display">Utopia</span>
         </div>
         {TABS.map(({ path: p, label, Icon }) => {
-          const active = p === '/' ? onFeed : path.startsWith(p);
+          const active = p === '/' ? path === '/' : p === '/feed' ? onFeed || !!play : path.startsWith(p);
           return (
             <button
               key={p}
@@ -143,7 +154,7 @@ export default function App() {
         })}
       </nav>
       <main id="main" className="main">
-        <Feed hidden={!onFeed || !!play} />
+        {feedMounted && <Feed hidden={!onFeed || !!play} />}
         {page && (
           <div className="page-layer" key={path}>
             <ErrorBoundary where={path} onExit={() => navigate('/')}>
@@ -174,7 +185,7 @@ function NotFound() {
       <h1 className="display">Lost in the mist</h1>
       <p className="muted">That page doesn’t exist.</p>
       <button className="btn btn-primary" onClick={() => navigate('/')}>
-        Back to the feed
+        Back home
       </button>
     </div>
   );

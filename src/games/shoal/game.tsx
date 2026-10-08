@@ -411,7 +411,7 @@ function labelTexture(text: string): THREE.Texture {
   g.lineWidth = 3;
   g.stroke();
   g.fillStyle = '#fff';
-  g.font = 'bold 32px Manrope, system-ui, sans-serif';
+  g.font = 'bold 32px "Geist Variable", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, 32, 34);

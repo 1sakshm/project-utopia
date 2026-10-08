@@ -613,7 +613,7 @@ function numberTexture(n: number): THREE.Texture {
   g.lineWidth = 4;
   g.stroke();
   g.fillStyle = '#fff4e4';
-  g.font = 'bold 52px Manrope, system-ui, sans-serif';
+  g.font = 'bold 52px "Geist Variable", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(String(n), 48, 51);

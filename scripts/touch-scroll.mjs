@@ -11,13 +11,13 @@ for (const [previewStyle, judgeTiming] of [['live', false], ['still', true]]) {
 console.log(`— pass: ${previewStyle} previews`);
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
-await page.goto(`http://localhost:${port}/`);
+await page.goto(`http://localhost:${port}/feed`);
 await page.evaluate((ps) => { window.__ps = ps;
   sessionStorage.clear();
   localStorage.setItem('utopia.coach', '1');
   localStorage.setItem('utopia.settings', JSON.stringify({ state: { previewStyle: window.__ps }, version: 1 }));
 }, previewStyle);
-await page.goto(`http://localhost:${port}/`);
+await page.goto(`http://localhost:${port}/feed`);
 await page.waitForSelector('.card');
 await page.waitForTimeout(4000); // let the live preview mount on card 0
 const cdp = await ctx.newCDPSession(page);

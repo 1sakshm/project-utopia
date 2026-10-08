@@ -22,7 +22,7 @@ const WINDOW_MS = 6000; // staircase success window (× timingMultiplier)
 const HINT_MS = 9000; // gentle hint pulse after this long (× timingMultiplier)
 const PENALTY_MS = 2000;
 const MAX_ITEMS = 90;
-const FONT = 'Manrope, system-ui, sans-serif';
+const FONT = 'Geist Variable, system-ui, sans-serif';
 const S = 12; // lattice spacing inside a glyph context (glyph spans ~30 units)
 
 interface Item {

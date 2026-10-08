@@ -140,7 +140,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const threadFx = new Graphics();
   const tray = new Container();
   const strip = new Container();
-  const ruleText = new Text({ text: '', style: { fontFamily: 'Manrope, system-ui, sans-serif' }, resolution: dpr });
+  const ruleText = new Text({ text: '', style: { fontFamily: 'Geist Variable, system-ui, sans-serif' }, resolution: dpr });
   ruleText.anchor.set(0.5);
   ruleText.alpha = 0;
   const fx = new Container();
@@ -460,7 +460,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
           drawSlot(pulse, gridGeom.size);
           const q = new Text({
             text: '?',
-            style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: Math.round(gridGeom.size * 0.38), fontWeight: '800', fill: S.highContrast ? 0xffffff : 0xffe2a8 },
+            style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: Math.round(gridGeom.size * 0.38), fontWeight: '800', fill: S.highContrast ? 0xffffff : 0xffe2a8 },
             resolution: dpr,
           });
           q.anchor.set(0.5);
@@ -558,7 +558,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       // number badge
       const badge = new Container();
       const bgc = new Graphics().circle(0, 0, 10).fill({ color: 0x140a14, alpha: 0.9 }).circle(0, 0, 10).stroke({ width: 1.5, color: S.highContrast ? 0xffffff : GOLD });
-      const bt = new Text({ text: String(i + 1), style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 12, fontWeight: '800', fill: 0xffffff }, resolution: dpr });
+      const bt = new Text({ text: String(i + 1), style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 12, fontWeight: '800', fill: 0xffffff }, resolution: dpr });
       bt.anchor.set(0.5);
       badge.addChild(bgc, bt);
       badge.position.set(-L.size / 2 + 4, -L.size / 2 + 4);
@@ -743,7 +743,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function showRule(msg: string) {
     ruleText.text = msg;
     ruleText.style = {
-      fontFamily: 'Manrope, system-ui, sans-serif',
+      fontFamily: 'Geist Variable, system-ui, sans-serif',
       fontSize: Math.round(14 * S.textScale),
       fontWeight: '700',
       fill: S.highContrast ? 0xffffff : 0xffe2a8,
@@ -879,7 +879,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     reveal.addChild(banner);
     const title = new Text({
       text: 'Your tapestry',
-      style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: Math.round(24 * S.textScale), fontWeight: '800', fill: hc ? 0xffffff : 0xffe2a8, letterSpacing: 1 },
+      style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: Math.round(24 * S.textScale), fontWeight: '800', fill: hc ? 0xffffff : 0xffe2a8, letterSpacing: 1 },
       resolution: dpr,
     });
     title.anchor.set(0.5);

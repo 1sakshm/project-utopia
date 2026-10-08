@@ -43,7 +43,7 @@ export default function Landing() {
 
   const play = (where: string) => {
     track({ name: 'landing_cta', where });
-    navigate('/');
+    navigate('/feed');
   };
 
   return (

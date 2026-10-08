@@ -425,7 +425,7 @@ function numberTexture(n: number): THREE.Texture {
   g.arc(32, 32, 26, 0, Math.PI * 2);
   g.fill();
   g.fillStyle = '#fff';
-  g.font = 'bold 32px Manrope, system-ui, sans-serif';
+  g.font = 'bold 32px "Geist Variable", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(String(n), 32, 34);

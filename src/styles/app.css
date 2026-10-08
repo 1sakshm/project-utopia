@@ -34,9 +34,8 @@
   justify-content: space-around;
   align-items: stretch;
   padding: 6px 8px calc(6px + var(--safe-bottom));
-  background: rgba(8, 10, 18, 0.82);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  /* solid, not backdrop-blurred: a blurred bar re-filters everything scrolling behind it on every frame */
+  background: rgba(10, 12, 20, 0.97);
   border-top: 1px solid var(--border);
   z-index: 20;
 }
@@ -1641,13 +1640,11 @@ kbd {
 @keyframes ab-word-in-from {
   from {
     opacity: 0;
-    transform: translateY(0.45em) rotate(2deg);
-    filter: blur(8px);
+    transform: translate3d(0, 0.35em, 0);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 @keyframes ab-fade-in-from {
@@ -1871,4 +1868,20 @@ kbd {
 }
 .error-card .row {
   justify-content: center;
+}
+
+/* Tighter vertical rhythm on laptops/desktops (short 768px screens had large dead gaps). */
+@media (min-width: 701px) {
+  .ab-hero.is-compact {
+    padding-bottom: 12px;
+  }
+  .ab-section {
+    padding-top: 40px;
+  }
+  .ab-section.is-tight {
+    padding-top: 20px;
+  }
+  .ab-head {
+    margin-bottom: 20px;
+  }
 }

@@ -14,8 +14,8 @@
   --radius-m: 20px;
   --radius-l: 28px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --font-ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
+  --font-ui: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Geist Variable', system-ui, sans-serif;
   --text-scale: 1;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -216,9 +216,14 @@ a {
     scroll-behavior: auto !important;
   }
 }
-:root[data-reduced-motion='true'] * {
+:root[data-reduced-motion='true'] *,
+:root[data-reduced-motion='true'] *::before,
+:root[data-reduced-motion='true'] *::after {
   transition-duration: 0.01ms !important;
   animation-duration: 0.01ms !important;
+  /* Play once and stop. Looping animations squeezed to 0.01ms would otherwise flicker endlessly (the aurora
+     lights strobed between keyframes). */
+  animation-iteration-count: 1 !important;
 }
 .chip-ability {
   padding-left: 4px;
@@ -369,4 +374,28 @@ a {
 }
 .u-answer[hidden] {
   display: none;
+}
+
+/* ---------- Typography (Bricolage Grotesque display + Geist UI) ---------- */
+.display {
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+/* Bricolage has no true italic: accent words stay upright and lean on the gradient + weight instead. */
+.ab-italic,
+.accent,
+.card-word.is-accent,
+.lp-step-n,
+.ab-num,
+.ab-eyebrow-num {
+  font-style: normal !important;
+}
+.ab-italic,
+.card-word.is-accent {
+  font-weight: 620;
+}
+body {
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

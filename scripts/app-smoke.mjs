@@ -23,15 +23,15 @@ const step = async (name, fn) => {
     await fn();
     console.log('✓', name);
   } catch (e) {
-    console.log('✗', name, String(e).slice(0, 300));
+    console.log('✗', name, String(e).slice(0, 1200));
     errors.push(`${name}: ${String(e).slice(0, 200)}`);
   }
 };
 
 await step('feed loads', async () => {
-  await page.goto(base + '/');
+  await page.goto(base + '/feed');
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto(base + '/');
+  await page.goto(base + '/feed');
   await page.waitForSelector('.card');
   await page.waitForTimeout(3500);
   await page.screenshot({ path: `shots/app-${tag}-feed.png` });
@@ -72,6 +72,18 @@ await step('exit returns to same card', async () => {
   const idx = await page.evaluate(() => Math.round(document.querySelector('.feed').scrollTop / document.querySelector('.feed').clientHeight));
   if (idx !== idxBefore) throw new Error(`feed index ${idx} !== ${idxBefore}`);
   await page.screenshot({ path: `shots/app-${tag}-returned.png` });
+});
+await step('home hub', async () => {
+  await page.goto(`${base}/`);
+  await page.waitForSelector('.home-hero');
+  await page.waitForSelector('.home-streak');
+  if ((await page.locator('.home-soon').count()) !== 4) throw new Error('expected 4 coming-soon tiles');
+  await page.locator('.home-soon').first().click();
+  await page.waitForSelector('.home-sheet');
+  await page.click('.home-sheet .btn-primary');
+  await page.waitForSelector('.home-sheet .btn-primary[disabled]');
+  await page.click('.home-sheet .btn:not(.btn-primary)');
+  await page.screenshot({ path: `shots/app-${tag}-home.png`, fullPage: false });
 });
 for (const p of ['library', 'progress', 'settings', 'about', 'game/echo-garden']) {
   await step(`page /${p}`, async () => {

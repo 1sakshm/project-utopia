@@ -5,7 +5,7 @@ import { createPixiApp, createParticles, glowTexture, gradientTexture, softTileP
 import { createLangToggle } from '@/sdk/voiceui';
 import { PACK } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const TRIALS = 24;
 const SHAPE_COLORS = [0xffd76a, 0x7fe7d8, 0xb9a2ff, 0xff9f8a];
 const ARROWS = ['↑', '↓', '←', '→'];

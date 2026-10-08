@@ -969,7 +969,7 @@ function glyphTexture(ch: string, color: string) {
   const g = c.getContext('2d')!;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.font = '800 88px Manrope, system-ui, sans-serif';
+  g.font = '800 88px "Geist Variable", system-ui, sans-serif';
   g.lineWidth = 10;
   g.strokeStyle = 'rgba(10,8,24,0.8)';
   g.strokeText(ch, 64, 68);
@@ -1049,7 +1049,7 @@ function cueTexture(dim: number) {
     g.arc(128, cy + 30, 22, Math.PI * 1.1, Math.PI * 1.9);
     g.stroke();
   }
-  g.font = '800 30px Manrope, system-ui, sans-serif';
+  g.font = '800 30px "Geist Variable", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(DIM_NAMES[dim].toUpperCase(), 128, 170);
@@ -1102,7 +1102,7 @@ function ShiftBanner({ view }: { view: View }) {
     const g = c.getContext('2d')!;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = '800 58px Manrope, system-ui, sans-serif';
+    g.font = '800 58px "Geist Variable", system-ui, sans-serif';
     g.lineWidth = 10;
     g.strokeStyle = 'rgba(12,8,30,0.85)';
     g.strokeText('✦ Shift spotted! ✦', 256, 66);

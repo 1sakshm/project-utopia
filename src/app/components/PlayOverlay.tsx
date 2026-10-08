@@ -358,7 +358,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
           useFeed.getState().setActive(idx);
           useFeed.getState().requestScroll(idx, false);
         }
-        navigate(`/?card=${gameId}`, { replace: true });
+        navigate(`/feed?card=${gameId}`, { replace: true });
       }
       after?.();
     };

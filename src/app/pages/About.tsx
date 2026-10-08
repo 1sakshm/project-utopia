@@ -115,7 +115,7 @@ export default function About() {
           <span>&amp; Claude</span> <span className="ab-wink">;p</span>
         </p>
         <p className="ab-credit-fine">
-          Every shape, texture and sound in these games is generated right in your browser, with no stock art. Typefaces: Fraunces, Manrope and Atkinson
+          Every shape, texture and sound in these games is generated right in your browser, with no stock art. Typefaces: Bricolage Grotesque, Geist and Atkinson
           Hyperlegible (SIL Open Font License). Built with React, Three.js and PixiJS.{' '}
           <a href="/privacy" onClick={(e) => (e.preventDefault(), navigate('/privacy'))}>
             Privacy &amp; terms

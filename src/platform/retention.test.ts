@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME_BY_ID } from '@/games/registry';
 import { ABILITY_RING } from './abilities';
 import { emptyProgress } from './progress';
-import { nextUp, shareText, starsFor, todayTrio, trioStatus } from './retention';
+import { computeStreak, nextUp, shareText, starsFor, todayTrio, trioStatus } from './retention';
 
 const ringOf = (id: string) => ABILITY_RING[GAME_BY_ID[id].manifest.abilities.primary];
 
@@ -53,5 +53,26 @@ describe('up next', () => {
     expect(ringOf(n!)).not.toBe(ringOf('echo-garden'));
     const played = nextUp('echo-garden', { [n!]: { ...emptyProgress(), sessions: 5 } });
     expect(played).not.toBe(n);
+  });
+});
+
+describe('streak', () => {
+  const at = (y: number, m: number, d: number) => ({ t: new Date(y, m - 1, d, 18).getTime(), ms: 60000 });
+  const now = new Date(2026, 9, 8, 20);
+  it('counts consecutive days and keeps today pending', () => {
+    expect(computeStreak([at(2026, 10, 8), at(2026, 10, 7), at(2026, 10, 6)], now).days).toBe(3);
+    const s = computeStreak([at(2026, 10, 7), at(2026, 10, 6)], now);
+    expect(s.days).toBe(2);
+    expect(s.playedToday).toBe(false);
+  });
+  it('forgives one missed day per week with a freeze, not two', () => {
+    const one = computeStreak([at(2026, 10, 8), at(2026, 10, 6), at(2026, 10, 5)], now);
+    expect(one.days).toBe(3);
+    expect(one.freezeReady).toBe(false);
+    const two = computeStreak([at(2026, 10, 8), at(2026, 10, 6), at(2026, 10, 4)], now);
+    expect(two.days).toBe(2);
+  });
+  it('is zero with no play', () => {
+    expect(computeStreak([], now).days).toBe(0);
   });
 });

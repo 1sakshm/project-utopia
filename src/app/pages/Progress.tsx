@@ -318,7 +318,7 @@ export default function Progress() {
             <AbilityGlyph id="calm" />
             <h3 className="display">Your story starts here</h3>
             <p>Play a game and your bests, sparklines and history will bloom on this page.</p>
-            <button className="btn btn-primary" onClick={() => navigate('/')}>
+            <button className="btn btn-primary" onClick={() => navigate('/feed')}>
               Discover games
             </button>
           </div>

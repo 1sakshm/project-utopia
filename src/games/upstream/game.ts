@@ -7,7 +7,7 @@ import { brushStroke, drawEnso, makeKoi, makeLilyPad, paperTexture, type Koi } f
 
 const ROUNDS = 2;
 const TRIALS = 40;
-const FONT = 'Manrope, system-ui, sans-serif';
+const FONT = 'Geist Variable, system-ui, sans-serif';
 const INK = 0x1c1a18;
 const VERMILION = 0xc8452d;
 const MAX_FLANK = 8;

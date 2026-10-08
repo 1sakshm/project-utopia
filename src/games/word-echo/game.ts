@@ -5,7 +5,7 @@ import { createPixiApp, createParticles, glowTexture, gradientTexture, softTileP
 import { createLangToggle } from '@/sdk/voiceui';
 import { WORDS } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const TRIALS = 10;
 
 interface Tile {

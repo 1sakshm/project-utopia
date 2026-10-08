@@ -160,7 +160,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const rng = ctx.rng;
   const stair = ctx.staircase({ min: 1, max: MAX_LEVEL, up: 3, down: 1 });
   if (preview) stair.set(4);
-  const FONT = 'Manrope, system-ui, sans-serif';
+  const FONT = 'Geist Variable, system-ui, sans-serif';
   let theme = THEMES[Math.floor(rng.next() * THEMES.length)];
   let themeIndex = THEMES.indexOf(theme);
   const maskTexCache = new Map<number, Texture>();
@@ -213,7 +213,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const irisG = new Graphics();
   const housing = new Graphics();
   const petalLayer = new Container();
-  const engrave = new Text({ text: 'GLIMPSE  ·  ƒ/1.4  ·  50 mm', style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 10, fontWeight: '700', fill: 0xffffff, letterSpacing: 3 } });
+  const engrave = new Text({ text: 'GLIMPSE  ·  ƒ/1.4  ·  50 mm', style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 10, fontWeight: '700', fill: 0xffffff, letterSpacing: 3 } });
   engrave.anchor.set(0.5);
   const cardLayer = new Container();
   const fx = new Container();

@@ -71,7 +71,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const dpr = ctx.quality.maxDpr;
 
   const readingFont = () =>
-    S.readingFont === 'atkinson' ? 'Atkinson Hyperlegible, Manrope, system-ui, sans-serif' : 'Manrope, system-ui, sans-serif';
+    S.readingFont === 'atkinson' ? 'Atkinson Hyperlegible, "Geist Variable", system-ui, sans-serif' : 'Geist Variable, system-ui, sans-serif';
 
   // Soft (dark neumorphism) look: the dusk sky holds one calm violet behind the prompt card and slots (which are
   // extruded from it), and the sunset glow is gathered into a band just above the horizon.
@@ -138,7 +138,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const cardTile = new Sprite();
   cardTile.anchor.set(0.5);
   const taskIcon = new Graphics();
-  const taskLabel = new Text({ text: '', style: { fontFamily: 'Manrope, system-ui, sans-serif' }, resolution: dpr });
+  const taskLabel = new Text({ text: '', style: { fontFamily: 'Geist Variable, system-ui, sans-serif' }, resolution: dpr });
   const promptText = new Text({ text: '', style: { fontFamily: readingFont() }, resolution: dpr });
   const speaker = new Container();
   const speakerBg = new Graphics();
@@ -147,7 +147,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   speakerGlow.anchor.set(0.5);
   speakerGlow.blendMode = 'add';
   speakerGlow.alpha = 0;
-  const speakerKey = new Text({ text: 'R', style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 11, fontWeight: '800', fill: 0xfff1e0 }, resolution: dpr });
+  const speakerKey = new Text({ text: 'R', style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 11, fontWeight: '800', fill: 0xfff1e0 }, resolution: dpr });
   speakerKey.anchor.set(0.5);
   speaker.addChild(speakerGlow, speakerBg, speakerIcon, speakerKey);
   card.addChild(cardTile, cardBg, taskIcon, taskLabel, promptText, speaker);
@@ -331,7 +331,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const ch = 118 * clamp(S.textScale, 1, 1.4);
     const ts = S.textScale;
     taskLabel.style = {
-      fontFamily: 'Manrope, system-ui, sans-serif',
+      fontFamily: 'Geist Variable, system-ui, sans-serif',
       fontSize: Math.round(13 * ts),
       fontWeight: '800',
       letterSpacing: 1.6,
@@ -569,7 +569,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const text = new Text({ text: label, style: {}, resolution: dpr });
     text.anchor.set(0.5);
     const badge = new Container();
-    const badgeText = new Text({ text: String(i + 1), style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 12, fontWeight: '800', fill: 0xffffff }, resolution: dpr });
+    const badgeText = new Text({ text: String(i + 1), style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 12, fontWeight: '800', fill: 0xffffff }, resolution: dpr });
     badgeText.anchor.set(0.5);
     const badgeBg = new Graphics().circle(0, 0, 10).fill({ color: 0x1c1433, alpha: 0.85 }).circle(0, 0, 10).stroke({ width: 1.5, color: 0xffffff, alpha: 0.8 });
     badge.addChild(badgeBg, badgeText);

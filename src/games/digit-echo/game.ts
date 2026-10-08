@@ -6,7 +6,7 @@ import { parseDigits } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { BACKWARDS_CUE, DIGIT_WORDS } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const TRIALS = 12;
 const MAX_MISSES = 3;
 const GOOD = 0x7dffb0;

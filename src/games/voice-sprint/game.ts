@@ -6,7 +6,7 @@ import { normalizeText, similarity, words } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { CATEGORIES, FILLER, type Category } from './content';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const ROUNDS = 3;
 const ROUND_MS = 40000;
 const UNTIMED_GOAL = 12;

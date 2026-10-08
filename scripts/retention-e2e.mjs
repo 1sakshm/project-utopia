@@ -43,7 +43,7 @@ await step('returning player sees Today’s 3 first', async () => {
     const g = { best: 10, bestRelaxed: 0, bestStats: {}, highestLevel: 2, lastLevel: 2, sessions: 1, playMs: 1, tutorialDone: true, lastPlayed: Date.now(), favorite: false, earlyExits: 0, dailyBest: null, storage: {} };
     localStorage.setItem('utopia.progress', JSON.stringify({ state: { games: { 'zenith': g }, history: [] }, version: 1 }));
   });
-  await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
+  await page.goto(base + '/feed', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.card-today[data-feed-index="0"]');
   await page.waitForTimeout(1500);
   await snap('shots/ret-today.png');
@@ -107,7 +107,7 @@ await step('stars and up-next on a normal run', async () => {
 });
 
 await step('feed Today card shows complete + progress stars', async () => {
-  await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
+  await page.goto(base + '/feed', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.card-today');
   const t = await page.textContent('.card-today');
   if (!t.includes('All three, done')) throw new Error('today card not complete');
@@ -120,7 +120,7 @@ await step('landing page renders with CTA', async () => {
   await page.goto(base + '/welcome', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.lp-title');
   await page.click('.lp-ctas .btn-primary');
-  await page.waitForFunction(() => location.pathname === '/');
+  await page.waitForFunction(() => location.pathname === '/feed');
 });
 
 console.log(errors.length ? `\n${errors.length} problem(s):\n` + errors.join('\n') : '\nAll retention checks passed.');

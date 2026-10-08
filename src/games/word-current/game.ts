@@ -35,7 +35,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   if (preview) stair.set(4);
   const note = ctx.audio.scale(62, 'majorPenta');
   const readingFont = () =>
-    S.readingFont === 'atkinson' ? 'Atkinson Hyperlegible, Manrope, system-ui, sans-serif' : 'Manrope, system-ui, sans-serif';
+    S.readingFont === 'atkinson' ? 'Atkinson Hyperlegible, "Geist Variable", system-ui, sans-serif' : 'Geist Variable, system-ui, sans-serif';
 
   // ---------------------------------------------------------------- scene
   const water = new Sprite(gradientTexture([
@@ -299,7 +299,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     drawPill(zoneLBg, hex(pal.accent), zoneFlashL, 'check');
     drawPill(zoneRBg, hex(pal.accent2), zoneFlashR, 'x');
     const ts = S.textScale;
-    const style = { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: Math.round(14 * ts), fontWeight: '800' as const, letterSpacing: 1.2, fill: 0xffffff };
+    const style = { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: Math.round(14 * ts), fontWeight: '800' as const, letterSpacing: 1.2, fill: 0xffffff };
     for (const [t, k] of [
       [zoneLText, zoneLKey],
       [zoneRText, zoneRKey],
@@ -310,7 +310,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       t.scale.set(1);
       const maxW = zw - zh - 14 - (S.showKeyHints ? 16 : 0);
       if (t.width > maxW) t.scale.set(maxW / t.width);
-      k.style = { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 13, fontWeight: '800', fill: 0xffffff };
+      k.style = { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 13, fontWeight: '800', fill: 0xffffff };
       k.alpha = 0.55;
       k.anchor.set(1, 0.5);
       k.position.set(zw - 12, zh / 2);
@@ -517,7 +517,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const tier = 1 + Math.min(3, Math.floor(streak / 5));
     const pop = new Text({
       text: `+${10 * tier}`,
-      style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 20, fontWeight: '800', fill: color },
+      style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: 20, fontWeight: '800', fill: color },
       resolution: dpr,
     });
     pop.anchor.set(0.5);
@@ -644,7 +644,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function showBanner(msg: string) {
     const t = new Text({
       text: msg,
-      style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: Math.round(26 * S.textScale), fontWeight: '800', fill: 0xfff3d6, letterSpacing: 1 },
+      style: { fontFamily: 'Geist Variable, system-ui, sans-serif', fontSize: Math.round(26 * S.textScale), fontWeight: '800', fill: 0xfff3d6, letterSpacing: 1 },
       resolution: dpr,
     });
     t.anchor.set(0.5);

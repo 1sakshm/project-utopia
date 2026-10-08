@@ -389,7 +389,7 @@ export default function create(ctx: GameContext): GameInstance {
     const max = Math.max(1, ...h);
     const el = document.createElement('div');
     el.style.cssText =
-      'position:absolute;left:50%;bottom:calc(64px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(300px,80%);padding:14px 16px 12px;border-radius:18px;background:rgba(8,10,30,0.72);border:1px solid rgba(255,255,255,0.14);color:#fff;font:600 13px Manrope,system-ui,sans-serif;text-align:center;pointer-events:none;';
+      'position:absolute;left:50%;bottom:calc(64px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(300px,80%);padding:14px 16px 12px;border-radius:18px;background:rgba(8,10,30,0.72);border:1px solid rgba(255,255,255,0.14);color:#fff;font:600 13px "Geist Variable",system-ui,sans-serif;text-align:center;pointer-events:none;';
     const title = document.createElement('div');
     title.textContent = 'Your timing';
     title.style.cssText = 'font-weight:800;font-size:15px;margin-bottom:8px;';
@@ -906,7 +906,7 @@ function makeLabelTexture(text: string, color: string) {
   g.lineWidth = 3;
   g.stroke();
   g.fillStyle = '#fff';
-  g.font = '800 32px Manrope, system-ui, sans-serif';
+  g.font = '800 32px "Geist Variable", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, 32, 34);
@@ -1112,7 +1112,7 @@ function drawPopup(g: CanvasRenderingContext2D, grade: number, err: number) {
     main = err === 999 ? '○ MISS' : err < 0 ? '◀ EARLY' : 'LATE ▶';
     color = '#b9b4e8';
   }
-  g.font = '800 40px Manrope, system-ui, sans-serif';
+  g.font = '800 40px "Geist Variable", system-ui, sans-serif';
   g.lineWidth = 7;
   g.strokeStyle = 'rgba(5,7,26,0.85)';
   g.strokeText(main, 128, 48);
@@ -1120,7 +1120,7 @@ function drawPopup(g: CanvasRenderingContext2D, grade: number, err: number) {
   g.fillText(main, 128, 48);
   if (err !== 999 && Math.abs(err) >= 1) {
     const sub = `${err < 0 ? '−' : '+'}${Math.round(Math.abs(err))} ms`;
-    g.font = '700 26px Manrope, system-ui, sans-serif';
+    g.font = '700 26px "Geist Variable", system-ui, sans-serif';
     g.lineWidth = 6;
     g.strokeText(sub, 128, 94);
     g.fillStyle = 'rgba(255,255,255,0.85)';

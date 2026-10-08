@@ -5,7 +5,7 @@ import { createPixiApp, createParticles, glowTexture, gradientTexture, softTileP
 import { CONCEPTS, type Concept } from './content';
 import { drawIcon } from './icons';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const TRIALS = 24;
 const say = (c: Concept, l: VoiceLang) => (l === 'en-IN' ? c.en : c.hi);
 

@@ -7,7 +7,7 @@ import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { ITEMS, STARTER, UI, type Item } from './content';
 import { drawIcon, type IconId } from './icons';
 
-const FONT = 'Manrope, "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const ROWS = 10;
 const BY_ID = new Map(ITEMS.map((it) => [it.id, it]));
 

@@ -60,15 +60,15 @@ export async function renderTodayCard(st: TrioStatus): Promise<Blob | null> {
   ctx.arc(130, 132, 34, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#f4f2ff';
-  ctx.font = '600 44px Fraunces, Georgia, serif';
+  ctx.font = '600 44px "Bricolage Grotesque Variable", system-ui, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.fillText('Project Utopia', 186, 134);
 
   const date = new Date(st.day + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
-  ctx.font = '800 30px Manrope, system-ui, sans-serif';
+  ctx.font = '800 30px "Geist Variable", system-ui, sans-serif';
   ctx.fillStyle = 'rgba(244,242,255,0.65)';
   ctx.fillText(`TODAY’S 3 · ${date.toUpperCase()}`, 96, 262);
-  ctx.font = '500 92px Fraunces, Georgia, serif';
+  ctx.font = '500 92px "Bricolage Grotesque Variable", system-ui, sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.fillText(st.complete ? 'All three, done.' : `${st.count} of 3 done.`, 92, 360);
 
@@ -96,13 +96,13 @@ export async function renderTodayCard(st: TrioStatus): Promise<Blob | null> {
       ctx.restore();
     }
     ctx.fillStyle = ring.color;
-    ctx.font = '800 26px Manrope, system-ui, sans-serif';
+    ctx.font = '800 26px "Geist Variable", system-ui, sans-serif';
     ctx.fillText(`${RING_EMOJI[ring.id]}  ${ring.label.toUpperCase()}`, 256, y + 70);
     ctx.fillStyle = '#ffffff';
-    ctx.font = '500 56px Fraunces, Georgia, serif';
+    ctx.font = '500 56px "Bricolage Grotesque Variable", system-ui, sans-serif';
     ctx.fillText(m.title, 256, y + 132);
     ctx.textAlign = 'right';
-    ctx.font = '800 48px Manrope, system-ui, sans-serif';
+    ctx.font = '800 48px "Geist Variable", system-ui, sans-serif';
     ctx.fillStyle = st.done[i] ? '#8dffc4' : 'rgba(244,242,255,0.4)';
     ctx.fillText(st.done[i] ? st.scores[i].toLocaleString('en-US') : '—', W - 116, y + 104);
     ctx.textAlign = 'left';
@@ -110,10 +110,10 @@ export async function renderTodayCard(st: TrioStatus): Promise<Blob | null> {
 
   // Footer CTA
   ctx.fillStyle = 'rgba(244,242,255,0.75)';
-  ctx.font = '700 34px Manrope, system-ui, sans-serif';
+  ctx.font = '700 34px "Geist Variable", system-ui, sans-serif';
   ctx.fillText('Same three games for everyone today.', 96, 1196);
   ctx.fillStyle = '#ffffff';
-  ctx.font = '800 38px Manrope, system-ui, sans-serif';
+  ctx.font = '800 38px "Geist Variable", system-ui, sans-serif';
   ctx.fillText('Play free → playutopia.pages.dev', 96, 1256);
 
   return new Promise((res) => c.toBlob((b) => res(b), 'image/png'));

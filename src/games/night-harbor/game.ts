@@ -18,7 +18,7 @@ import { beamTexture, fogTexture, streakTexture } from './art';
 
 const ROUNDS = 2;
 const ROUND_MS = 100000;
-const FONT = 'Manrope, system-ui, sans-serif';
+const FONT = 'Geist Variable, system-ui, sans-serif';
 const LAMP_COLORS = [0xffc861, 0xfff1d6, 0x8ff5d8]; // ▲ amber, ● warm white, ■ sea-green (shape is the code)
 const WINDOWS = 14;
 

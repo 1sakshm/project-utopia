@@ -48,7 +48,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const rand = () => rng.next();
   const stair = ctx.staircase({ min: 1, max: 10, up: 3, down: 1 });
   if (preview) stair.set(3);
-  const FONT = 'Manrope, system-ui, sans-serif';
+  const FONT = 'Geist Variable, system-ui, sans-serif';
   const ts = () => ctx.settings.textScale || 1;
   const CYAN = hex(pal.accent);
 
