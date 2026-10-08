@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
-import { clamp, easeInOutSine, lerp, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeInOutSine, lerp, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softShades, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import {
   levelParams,
   lureOf,
@@ -58,6 +58,25 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const stair = ctx.staircase({ min: 1, max: 12, up: 3, down: 1 });
   if (preview) stair.set(3);
   const low = ctx.quality.tier === 'low';
+  // Soft (dark neumorphism) look: only the signal panel and the bell become extruded surfaces; the scene stays painted.
+  const soft = () => ctx.settings.soft;
+  const SOFT_BASE = '#0d1532'; // night-sky navy the panel is pressed out of
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  // Inset well drawn with plain Graphics from softShades (cheap, redrawn only on layout/state changes):
+  // a dark rim on the top-left fading to the face colour, with a faint light lip on the bottom-right.
+  function softWell(g: Graphics, x: number, y: number, w: number, h: number, r: number, base: string, d = 3) {
+    const sh = softShades(base);
+    g.roundRect(x, y, w, h, r).fill({ color: mixHex(base, '#000000', 0.42) });
+    g.roundRect(x + d * 0.35, y + d * 0.35, w - d * 0.35, h - d * 0.35, Math.max(0, r - d * 0.2)).fill({ color: mixHex(base, '#000000', 0.22) });
+    g.roundRect(x + d * 0.75, y + d * 0.75, w - d * 0.75, h - d * 0.75, Math.max(0, r - d * 0.4)).fill({ color: mixHex(base, '#000000', 0.08) });
+    g.roundRect(x, y, w, h, r).stroke({ width: 1, color: sh.light, alpha: 0.45 });
+  }
 
   // ---------------------------------------------------------------- layers
   const skyNight = new Sprite(gradientTexture([[0, '#03060f'], [0.55, '#0b1433'], [1, '#1b2450']]));
@@ -134,6 +153,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   // signal panel
   const panel = new Container();
   const panelBg = new Graphics();
+  const panelTile = new Sprite();
+  panelTile.anchor.set(0.5);
+  const panelWells = new Graphics();
   const panelLabel = new Text({ text: 'SIGNAL', style: { fontFamily: FONT, fontSize: 11, fontWeight: '800', fill: 0xffe7b0, letterSpacing: 3 } });
   panelLabel.anchor.set(0.5);
   const panelLamps: Graphics[] = [];
@@ -146,13 +168,15 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const g = new Graphics();
     panelLamps.push(g);
   }
-  panel.addChild(panelBg, panelLabel, ...panelGlows, ...panelLamps);
+  panel.addChild(panelTile, panelBg, panelWells, panelLabel, ...panelGlows, ...panelLamps);
 
   // bell button + hint
   const bell = new Container();
   const bellBg = new Graphics();
+  const bellTile = new Sprite();
+  bellTile.anchor.set(0.5);
   const bellIcon = new Graphics();
-  bell.addChild(bellBg, bellIcon);
+  bell.addChild(bellTile, bellBg, bellIcon);
   const hint = new Text({ text: '', style: { fontFamily: FONT, fontSize: 13, fontWeight: '700', fill: 0xdfe6ff, align: 'center' } });
   hint.anchor.set(0.5);
   const banner = new Text({ text: '', style: { fontFamily: FONT, fontSize: 24, fontWeight: '800', fill: 0xffffff, align: 'center', wordWrap: true, wordWrapWidth: 320, lineHeight: 32 } });
@@ -304,16 +328,27 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const ph = 62;
     panel.position.set(safe.x + safe.w / 2, top + ph / 2);
     panelBg.clear();
-    panelBg.roundRect(-pw / 2, -ph / 2, pw, ph, 16).fill({ color: hc ? 0x000000 : 0x0a1024, alpha: hc ? 1 : 0.72 });
-    panelBg.roundRect(-pw / 2, -ph / 2, pw, ph, 16).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : 0xffd27a, alpha: hc ? 1 : 0.6 });
+    panelTile.visible = soft();
+    if (soft()) {
+      // raised navy plate with a faint brass rim; each lamp sits in its own inset well
+      setSoft(panelTile, { width: pw, height: ph, base: SOFT_BASE, radius: 20, depth: 6, rim: 'rgba(255,210,122,0.28)', rimWidth: 1.5, resolution: sres });
+    } else {
+      panelBg.roundRect(-pw / 2, -ph / 2, pw, ph, 16).fill({ color: hc ? 0x000000 : 0x0a1024, alpha: hc ? 1 : 0.72 });
+      panelBg.roundRect(-pw / 2, -ph / 2, pw, ph, 16).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : 0xffd27a, alpha: hc ? 1 : 0.6 });
+    }
     panelLabel.position.set(-pw / 2 + 44, 0);
     drawPanel();
     // bell
     const br = 34;
     bell.position.set(safe.x + safe.w / 2, safe.y + safe.h - 62);
     bellBg.clear();
-    bellBg.circle(0, 0, br).fill({ color: hc ? 0x000000 : 0x0d1430, alpha: hc ? 1 : 0.75 });
-    bellBg.circle(0, 0, br).stroke({ width: hc ? 3 : 2, color: hc ? 0xffffff : 0xffd27a, alpha: hc ? 1 : 0.8 });
+    bellTile.visible = soft();
+    if (soft()) {
+      setBellTile(false);
+    } else {
+      bellBg.circle(0, 0, br).fill({ color: hc ? 0x000000 : 0x0d1430, alpha: hc ? 1 : 0.75 });
+      bellBg.circle(0, 0, br).stroke({ width: hc ? 3 : 2, color: hc ? 0xffffff : 0xffd27a, alpha: hc ? 1 : 0.8 });
+    }
     bellIcon.clear();
     bellIcon.moveTo(-13, 9).quadraticCurveTo(-12, -14, 0, -15).quadraticCurveTo(12, -14, 13, 9).lineTo(-13, 9).fill({ color: hc ? 0xffffff : 0xffd27a });
     bellIcon.circle(0, 13, 3.5).fill({ color: hc ? 0xffffff : 0xffd27a });
@@ -329,17 +364,34 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
   let signal: Pattern = makeSignal(rng);
 
+  // Soft bell: a raised round button that sinks in for a moment when rung.
+  function setBellTile(pressed: boolean) {
+    setSoft(bellTile, { width: 68, height: 68, base: SOFT_BASE, radius: 34, depth: pressed ? 2 : 7, rim: 'rgba(255,210,122,0.45)', rimWidth: 1.5, resolution: sres });
+  }
+  function bellPulse() {
+    void tween(ctx, 220, (t) => bell.scale.set(1 + Math.sin(t * Math.PI) * 0.12));
+    if (!soft()) return;
+    setBellTile(true);
+    ctx.after(200, () => {
+      if (soft()) setBellTile(false);
+    });
+  }
+
   function drawPanel() {
     const hc = ctx.settings.highContrast;
     const pwHalf = Math.min(safe.w - 40, 250) / 2;
+    panelWells.clear();
     for (let i = 0; i < 3; i++) {
       const x = -pwHalf + 108 + i * 44;
+      if (soft()) softWell(panelWells, x - 19, -18, 38, 38, 19, SOFT_BASE, 4);
       const g = panelLamps[i];
       g.clear();
       drawLampShape(g, signal[i], x, 0, 12, LAMP_COLORS[signal[i]], hc);
       panelGlows[i].position.set(x, 0);
       panelGlows[i].tint = LAMP_COLORS[signal[i]];
-      panelGlows[i].scale.set(1.1);
+      panelGlows[i].scale.set(soft() ? 0.8 : 1.1);
+      panelGlows[i].alpha = soft() ? 0.55 : 1;
+
       panelGlows[i].visible = !hc;
     }
   }
@@ -514,7 +566,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function ring() {
     if (!running) return;
     const now = ctx.time();
-    void tween(ctx, 220, (t) => bell.scale.set(1 + Math.sin(t * Math.PI) * 0.12));
+    bellPulse();
     const visible = ships.filter((s) => inView(s) && !s.responded);
     const target = visible.find((s) => s.kind === 'target');
     if (target) {
@@ -684,7 +736,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       s.ghostAt = Infinity;
       if (s.kind === 'target') hit(s, now);
       else falseAlarm(s, now);
-      void tween(ctx, 220, (t) => bell.scale.set(1 + Math.sin(t * Math.PI) * 0.12));
+      bellPulse();
     }
   }
 

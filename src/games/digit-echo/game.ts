@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, easeOutCubic, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, easeOutCubic, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture } from '@/sdk/pixi';
 import { parseDigits } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { BACKWARDS_CUE, DIGIT_WORDS } from './content';
@@ -38,11 +38,19 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(62, 'majorPenta');
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): the answer bubble is extruded from one calm surface; the night sky settles onto it.
+  const surf = mixHex(pal.bg, pal.bg2, 0.4);
+  const auroraBg = gradientTexture([
     [0, '#05060f'],
     [0.45, '#161234'],
     [1, '#0a0c1f'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.5, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
   const skyGlow = new Sprite(glowTexture(256, 0.2));
   skyGlow.anchor.set(0.5);
   skyGlow.tint = hex(pal.accent2);
@@ -62,11 +70,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   revIcon.visible = false;
   const bubble = new Container();
   const bubbleBg = new Graphics();
+  const bubbleFace = new Sprite();
+  bubbleFace.anchor.set(0.5);
   const bubbleText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 24, fontWeight: '800', fill: '#ffffff', align: 'center', letterSpacing: 4 } });
   bubbleText.anchor.set(0.5);
   const bubbleLabel = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.6)', letterSpacing: 2 } });
   bubbleLabel.anchor.set(0.5);
-  bubble.addChild(bubbleBg, bubbleText, bubbleLabel);
+  bubble.addChild(bubbleFace, bubbleBg, bubbleText, bubbleLabel);
   bubble.visible = false;
   ui.addChild(status, revIcon, bubble);
 
@@ -95,8 +105,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
-    bg.width = W;
-    bg.height = H;
+    applyLook();
     cx = safe.x + safe.w / 2;
     skyGlow.position.set(cx, safe.y + safe.h * 0.4);
     skyGlow.scale.set(Math.max(W, H) / 180);
@@ -109,10 +118,32 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     layoutLanterns();
   }
 
+  function applyLook() {
+    const soft = ctx.settings.soft;
+    bg.texture = soft ? softBg : auroraBg;
+    bg.width = W;
+    bg.height = H;
+    skyGlow.alpha = soft ? 0.07 : 0.12;
+    moteSprites.forEach((m, i) => (m.visible = !soft || i % 2 === 0));
+  }
+
   function drawBubble() {
     const bw = Math.min(safe.w - 48, Math.max(200, bubbleText.width + 70));
     const bh = 64;
     bubbleBg.clear();
+    bubbleFace.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // width snapped to 16px steps so the cached textures stay few while digits type in
+      const w = Math.min(Math.floor(safe.w - 48), Math.ceil(bw / 16) * 16);
+      const o = { width: w, height: bh, radius: 22, base: surf, depth: 7, resolution: ctx.quality.maxDpr };
+      const pad = softTilePad(o);
+      bubbleFace.texture = softTileTexture(o);
+      bubbleFace.width = w + pad * 2;
+      bubbleFace.height = bh + pad * 2;
+      bubbleLabel.position.set(0, -bh / 2 + 13);
+      bubbleText.position.set(0, 8);
+      return;
+    }
     const hc = ctx.settings.highContrast;
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).fill({ color: hc ? 0x000000 : 0x1a1838, alpha: 0.82 });
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).stroke({ width: hc ? 3 : 1.5, color: 0xffffff, alpha: hc ? 1 : 0.3 });
@@ -494,6 +525,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       void run();
     },
     onSettings: () => {
+      applyLook();
       layoutLanterns();
       drawBubble();
     },

@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
 import { PAIRS, UI, type Pair } from './content';
 
@@ -26,6 +26,7 @@ interface Shell {
 interface Btn {
   c: Container;
   bg: Graphics;
+  tile: Sprite;
   glyph: Text;
   label: Text;
   key: Text;
@@ -52,19 +53,37 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(62, 'majorPenta');
   const ACC = hex(pal.accent);
   const SHELL = hex(pal.accent2);
-
-  // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (dark neumorphism) look: a calm, near-uniform sea floor that the buttons and the shell bed are extruded from.
+  const soft = () => ctx.settings.soft;
+  const SB = '#0e2434';
+  const sres = ctx.quality.maxDpr;
+  const auroraBg = gradientTexture([
     [0, '#050d18'],
     [0.55, '#0e2a3e'],
     [1, '#0a1c2a'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, '#081622'],
+    [0.4, SB],
+    [1, SB],
+  ]);
+  function setSoft(s: Sprite, o: SoftTileOptions) {
+    s.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    s.width = o.width + p * 2;
+    s.height = o.height + p * 2;
+  }
+
+  // ---- scene
+  const bg = new Sprite(auroraBg);
   const sand = new Graphics();
+  const bed = new Sprite();
+  bed.anchor.set(0.5);
   const motes = new Container();
   const shellLayer = new Container();
   const ui = new Container();
   const fx = new Container();
-  app.stage.addChild(bg, sand, motes, shellLayer, ui, fx);
+  app.stage.addChild(bg, sand, bed, motes, shellLayer, ui, fx);
   const particles = createParticles(ctx, fx, 200);
 
   const status = new Text({ text: '', style: { fontFamily: FONT, fontSize: 18, fontWeight: '800', fill: pal.highlight, align: 'center', letterSpacing: 2 } });
@@ -206,24 +225,35 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function makeBtn(glyph: string, label: string, key: string, onTap: () => void): Btn {
     const c = new Container();
     const bgG = new Graphics();
+    const tile = new Sprite();
+    tile.anchor.set(0.5);
     const g = new Text({ text: glyph, style: { fontFamily: FONT, fontSize: 30, fontWeight: '900', fill: '#ffffff' } });
     g.anchor.set(0.5);
     const l = new Text({ text: label, style: { fontFamily: FONT, fontSize: 17, fontWeight: '800', fill: '#ffffff' } });
     l.anchor.set(0.5);
     const k = new Text({ text: key, style: { fontFamily: FONT, fontSize: 11, fontWeight: '800', fill: 'rgba(255,255,255,0.5)' } });
     k.anchor.set(0.5);
-    c.addChild(bgG, g, l, k);
+    c.addChild(tile, bgG, g, l, k);
     c.eventMode = preview ? 'none' : 'static';
     c.cursor = 'pointer';
     c.on('pointertap', onTap);
     ui.addChild(c);
-    return { c, bg: bgG, glyph: g, label: l, key: k, w: 0, h: 0 };
+    return { c, bg: bgG, tile, glyph: g, label: l, key: k, w: 0, h: 0 };
   }
 
   function drawBtn(b: Btn, state: 'idle' | 'off' | 'ok' | 'wrong' | 'answer') {
     const hc = ctx.settings.highContrast;
     const g = b.bg;
     g.clear();
+    b.tile.visible = soft();
+    if (soft()) {
+      // chosen answers sink in (pressed); the colored rim keeps the right / wrong meaning, the glyph stays on top
+      const pressed = state === 'ok' || state === 'wrong';
+      const rim = state === 'ok' || state === 'answer' ? pal.accent : state === 'wrong' ? '#ff9fb8' : undefined;
+      setSoft(b.tile, { width: b.w, height: b.h, base: SB, radius: 24, pressed, rim, rimWidth: 3, depth: 7, resolution: sres });
+      b.c.alpha = state === 'off' ? 0.6 : 1;
+      return;
+    }
     const fill = hc ? 0x000000 : state === 'ok' ? 0x1d4a48 : state === 'wrong' ? 0x3a2233 : 0x133148;
     g.roundRect(-b.w / 2, -b.h / 2, b.w, b.h, 24).fill({ color: fill, alpha: hc ? 1 : 0.85 });
     if (!hc) g.moveTo(-b.w / 2 + 22, -b.h / 2 + 2.5).lineTo(b.w / 2 - 22, -b.h / 2 + 2.5).stroke({ width: 1.5, color: 0xffffff, alpha: 0.2 });
@@ -269,6 +299,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = soft() ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
     status.position.set(safe.x + safe.w / 2, Math.max(safe.y + safe.h * 0.13, 100));
@@ -276,8 +307,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     shellY = safe.y + safe.h * 0.42;
     sand.clear();
     const sy = shellY + 30;
-    sand.ellipse(W / 2, sy + H * 0.5, W * 0.9, H * 0.5).fill({ color: 0x14384c, alpha: 0.35 });
-    sand.ellipse(W / 2, sy + H * 0.56, W * 0.8, H * 0.5).fill({ color: 0x0f2c3d, alpha: 0.5 });
+    bed.visible = soft();
+    if (soft()) {
+      // an inset sand bed the shells rest in, instead of the layered sand ellipses
+      const bw = safe.w - 24;
+      const bh = 216;
+      setSoft(bed, { width: bw, height: bh, base: SB, radius: 44, pressed: true, depth: 8, resolution: sres });
+      bed.position.set(safe.x + safe.w / 2, shellY + 8);
+    } else {
+      sand.ellipse(W / 2, sy + H * 0.5, W * 0.9, H * 0.5).fill({ color: 0x14384c, alpha: 0.35 });
+      sand.ellipse(W / 2, sy + H * 0.56, W * 0.8, H * 0.5).fill({ color: 0x0f2c3d, alpha: 0.5 });
+    }
     moteSprites.forEach((m, i) => m.position.set((((i * 7919) % 1000) / 1000) * W, (((i * 104729) % 1000) / 1000) * H));
     layoutShells();
     layoutButtons();

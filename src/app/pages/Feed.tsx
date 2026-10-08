@@ -396,7 +396,7 @@ function GameCard({
       className={`card ${active ? 'is-active' : ''}`}
       data-feed-index={index}
       aria-label={`Game ${(index % (total / 2)) + 1}: ${m.title}. ${m.hook}`}
-      style={{ ['--acc' as string]: m.palette.accent, ['--acc2' as string]: m.palette.accent2 }}
+      style={{ ['--acc' as string]: m.palette.accent, ['--acc2' as string]: m.palette.accent2, ['--gbg' as string]: m.palette.bg }}
     >
       <div className="card-media" onClick={() => setHint((h) => !h)}>
         {near && <PosterArt manifest={m} />}

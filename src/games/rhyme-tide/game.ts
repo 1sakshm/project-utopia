@@ -1,7 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture, type TextStyleOptions } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, easeOutCubic, hex, lerp, tween, TAU } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { makePrompt, type Prompt, type Task } from './logic';
 
 const PROMPTS_PER_ROUND = 10;
@@ -73,14 +73,34 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const readingFont = () =>
     S.readingFont === 'atkinson' ? 'Atkinson Hyperlegible, Manrope, system-ui, sans-serif' : 'Manrope, system-ui, sans-serif';
 
-  // ---------------------------------------------------------------- scene graph
-  const sky = new Sprite(gradientTexture([
+  // Soft (dark neumorphism) look: the dusk sky holds one calm violet behind the prompt card and slots (which are
+  // extruded from it), and the sunset glow is gathered into a band just above the horizon.
+  const soft = () => S.soft;
+  const SB = '#2a1f46';
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  const auroraSky = gradientTexture([
     [0, '#1d1638'],
     [0.35, '#4a2f63'],
     [0.7, '#b8607a'],
     [0.92, '#f3a37f'],
     [1, '#ffd2a1'],
-  ]));
+  ]);
+  const softSky = gradientTexture([
+    [0, '#1b1435'],
+    [0.32, SB],
+    [0.84, SB],
+    [0.93, '#a8587a'],
+    [0.98, '#f3a37f'],
+    [1, '#ffd2a1'],
+  ]);
+
+  // ---------------------------------------------------------------- scene graph
+  const sky = new Sprite(auroraSky);
   const stars = new Graphics();
   const sunGlow = new Sprite(glowTexture(256, 0.18));
   sunGlow.anchor.set(0.5);
@@ -115,6 +135,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   // prompt card
   const card = new Container();
   const cardBg = new Graphics();
+  const cardTile = new Sprite();
+  cardTile.anchor.set(0.5);
   const taskIcon = new Graphics();
   const taskLabel = new Text({ text: '', style: { fontFamily: 'Manrope, system-ui, sans-serif' }, resolution: dpr });
   const promptText = new Text({ text: '', style: { fontFamily: readingFont() }, resolution: dpr });
@@ -128,7 +150,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const speakerKey = new Text({ text: 'R', style: { fontFamily: 'Manrope, system-ui, sans-serif', fontSize: 11, fontWeight: '800', fill: 0xfff1e0 }, resolution: dpr });
   speakerKey.anchor.set(0.5);
   speaker.addChild(speakerGlow, speakerBg, speakerIcon, speakerKey);
-  card.addChild(cardBg, taskIcon, taskLabel, promptText, speaker);
+  card.addChild(cardTile, cardBg, taskIcon, taskLabel, promptText, speaker);
 
   // build slots
   const slots = new Container();
@@ -161,7 +183,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   let accepting = false;
   let promptStart = 0;
   let resolvePrompt: (() => void) | null = null;
-  let slotViews: Array<{ box: Graphics; text: Text; filled: boolean }> = [];
+  let slotViews: Array<{ box: Container; text: Text; filled: boolean }> = [];
   let stopAmbient: (() => void) | null = null;
   let nextSwash = 0;
   let speakingPulse = 0;
@@ -191,6 +213,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     horizonY = safe.y + safe.h * 0.47;
     shellY = safe.y + safe.h * 0.685;
 
+    sky.texture = soft() ? softSky : auroraSky;
     sky.width = W;
     sky.height = horizonY + 2;
     sky.visible = true;
@@ -269,8 +292,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const ch = 118 * clamp(S.textScale, 1, 1.4);
     card.position.set(safe.x + 16, safe.y + safe.h * 0.19);
     cardBg.clear();
-    cardBg.roundRect(0, 0, cw, ch, 22).fill({ color: hc ? 0x000000 : 0x1c1433, alpha: hc ? 1 : 0.62 });
-    cardBg.roundRect(0, 0, cw, ch, 22).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : 0xffd9c2, alpha: hc ? 1 : 0.35 });
+    cardTile.visible = soft();
+    if (soft()) {
+      setSoft(cardTile, { width: cw, height: ch, base: SB, radius: 22, depth: 9, resolution: dpr });
+      cardTile.position.set(cw / 2, ch / 2);
+    } else {
+      cardBg.roundRect(0, 0, cw, ch, 22).fill({ color: hc ? 0x000000 : 0x1c1433, alpha: hc ? 1 : 0.62 });
+      cardBg.roundRect(0, 0, cw, ch, 22).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : 0xffd9c2, alpha: hc ? 1 : 0.35 });
+    }
     const sr = 26;
     speaker.position.set(cw - sr - 14, ch / 2);
     speakerBg.clear();
@@ -414,13 +443,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const y = slotRowY();
     const hc = S.highContrast;
     for (let i = 0; i < n; i++) {
-      const box = new Graphics();
+      // a container (soft tile + drawn box + text), since Graphics should not hold children
+      const box = new Container();
+      const boxBg = new Graphics();
+      boxBg.label = 'slotBg';
+      box.addChild(boxBg);
       const filled = i < step;
       box.position.set(x0 + i * (sw + gap) + sw / 2, y);
       drawSlotBox(box, sw, sh, filled);
       const t = new Text({
         text: filled ? prompt.sequence[i] : '',
-        style: { fontFamily: readingFont(), fontSize: Math.round(22 * S.textScale), fontWeight: '700', fill: hc ? 0xffffff : 0x2a2140 },
+        style: { fontFamily: readingFont(), fontSize: Math.round(22 * S.textScale), fontWeight: '700', fill: hc ? 0xffffff : soft() ? 0xfff1e0 : 0x2a2140 },
         resolution: dpr,
       });
       t.anchor.set(0.5);
@@ -431,9 +464,24 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     }
   }
 
-  function drawSlotBox(box: Graphics, sw: number, sh: number, filled: boolean) {
+  function drawSlotBox(view: Container, sw: number, sh: number, filled: boolean) {
     const hc = S.highContrast;
+    const box = view.children.find((c) => c.label === 'slotBg') as Graphics;
     box.clear();
+    let tile = view.children.find((c) => c.label === 'softTile') as Sprite | undefined;
+    if (soft()) {
+      // empty slots are inset wells; a filled slot pops out with the accent rim
+      if (!tile) {
+        tile = new Sprite();
+        tile.anchor.set(0.5);
+        tile.label = 'softTile';
+        view.addChildAt(tile, 0);
+      }
+      tile.visible = true;
+      setSoft(tile, { width: Math.round(sw), height: Math.round(sh), base: SB, radius: 12, pressed: !filled, rim: filled ? pal.accent : undefined, rimWidth: 2, depth: filled ? 5 : 4, resolution: dpr });
+      return;
+    }
+    if (tile) tile.visible = false;
     if (filled) {
       box.roundRect(-sw / 2, -sh / 2, sw, sh, 12).fill({ color: hc ? 0x000000 : 0xfff1e0, alpha: 1 });
       box.roundRect(-sw / 2, -sh / 2, sw, sh, 12).stroke({ width: hc ? 3 : 2, color: hc ? 0xffffff : hex(pal.accent) });
@@ -714,7 +762,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     }
   }
 
-  function flyToSlot(sh: Shell, slot: { box: Graphics; text: Text; filled: boolean } | undefined, idx: number) {
+  function flyToSlot(sh: Shell, slot: { box: Container; text: Text; filled: boolean } | undefined, idx: number) {
     if (!slot || !prompt) return;
     const sx = sh.view.x;
     const sy = sh.view.y;

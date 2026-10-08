@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutCubic } from '@/sdk';
 import { mountR3F, useGame, GameEffects, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
+import { clay, shade } from './soft';
 import {
   POSITIONS,
   ROUNDS,
@@ -478,18 +479,52 @@ function flareTexture(): THREE.Texture {
 
 function Scene({ view, burstRef }: { view: View; burstRef: { current: BurstHandle | null } }) {
   useSyncExternalStore(view.subscribe, view.getVersion);
+  const soft = useGame().settings.soft;
   return (
     <>
       <CameraRig />
       <Nebula />
       <StarField />
+      {soft && <SoftSockets />}
       <Constellation key={view.constellation} view={view} />
       {Array.from({ length: POSITIONS }, (_, i) => (
         <Socket key={i} index={i} view={view} />
       ))}
       <Puffs view={view} />
       <ParticleBurst ref={(h) => { burstRef.current = h; }} max={220} size={0.1} />
-      <GameEffects bloom={1.0} threshold={0.3} />
+      <GameEffects bloom={soft ? 0.8 : 1.0} threshold={soft ? 0.36 : 0.3} />
+    </>
+  );
+}
+
+/**
+ * Soft look: every star sits on a soft clay button (a rounded lip around a gently domed face), carved from
+ * the night sky's own colour. Two instanced meshes, lit by their own soft lights (everything else is unlit).
+ */
+function SoftSockets() {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  const parts = useMemo(() => {
+    const lip = new THREE.TorusGeometry(0.44, 0.075, 14, 48);
+    const face = new THREE.SphereGeometry(0.44, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 1, 0.12);
+    return { lip, face, lipM: clay(shade(bg, 0.16), { roughness: 0.9 }), faceM: clay(shade(bg, 0.04), { roughness: 1 }) };
+  }, [bg]);
+  const place = (m: THREE.InstancedMesh | null, z: number) => {
+    if (!m) return;
+    const o = new THREE.Object3D();
+    SOCKETS.forEach(([x, y], k) => {
+      o.position.set(x, y, z);
+      o.updateMatrix();
+      m.setMatrixAt(k, o.matrix);
+    });
+    m.instanceMatrix.needsUpdate = true;
+  };
+  return (
+    <>
+      <hemisphereLight args={['#c9cfff', '#05061a', 0.7]} />
+      <directionalLight position={[-4, 6, 8]} intensity={1.1} color="#e6e9ff" />
+      <instancedMesh ref={(m) => place(m, -0.12)} args={[parts.face, parts.faceM, SOCKETS.length]} />
+      <instancedMesh ref={(m) => place(m, -0.06)} args={[parts.lip, parts.lipM, SOCKETS.length]} />
     </>
   );
 }

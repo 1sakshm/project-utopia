@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { heardWord, words } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { ITEMS, STARTER, UI, type Item } from './content';
@@ -15,6 +15,7 @@ interface Tile {
   c: Container;
   float: Container;
   glass: Graphics;
+  face: Sprite;
   glow: Sprite;
   icon: Graphics;
   num: Text;
@@ -64,11 +65,25 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(62, 'majorPenta');
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): picture tiles and the "you said" bubble are extruded from one calm surface.
+  const surf = mixHex(pal.bg, pal.bg2, 0.5);
+  const auroraBg = gradientTexture([
     [0, '#070b1a'],
     [0.55, '#151c3a'],
     [1, '#0a1020'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.25, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: ctx.quality.maxDpr });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const motes = new Container();
   const topLayer = new Container();
   const tileLayer = new Container();
@@ -84,14 +99,20 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   status.anchor.set(0.5);
   const sub = new Text({ text: '', style: { fontFamily: FONT, fontSize: 15, fontWeight: '700', fill: 'rgba(255,255,255,0.7)', align: 'center' } });
   sub.anchor.set(0.5);
+  const breathTrack = new Sprite();
+  breathTrack.anchor.set(0.5);
+  breathTrack.visible = false;
   const breath = new Graphics();
+  const bubbleFace = new Sprite();
+  bubbleFace.anchor.set(0.5);
+  bubbleFace.visible = false;
   const bubble = new Graphics();
   const said = new Text({
     text: '',
     style: { fontFamily: FONT, fontSize: 19, fontWeight: '800', fill: '#ffffff', align: 'center', wordWrap: true, wordWrapWidth: 320, lineHeight: 26 },
   });
   said.anchor.set(0.5);
-  topLayer.addChild(aura, status, sub, breath, bubble, said);
+  topLayer.addChild(aura, status, sub, breathTrack, breath, bubbleFace, bubble, said);
 
   const moteSprites: Sprite[] = [];
   for (let i = 0; i < Math.round(34 * ctx.quality.particleScale) + 8; i++) {
@@ -116,8 +137,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = ctx.settings.soft ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
+    aura.alpha = ctx.settings.soft ? 0.1 : 0.18;
+    moteSprites.forEach((m, i) => (m.visible = !ctx.settings.soft || i % 2 === 0));
     const cx = safe.x + safe.w / 2;
     status.position.set(cx, Math.max(safe.y + safe.h * 0.13, 100));
     sub.position.set(cx, status.y + 28);
@@ -137,21 +161,30 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     glow.blendMode = 'add';
     glow.alpha = 0;
     const glass = new Graphics();
+    const face = new Sprite();
+    face.anchor.set(0.5);
     const icon = new Graphics();
     const num = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.5)' } });
     const name = new Text({ text: '', style: { fontFamily: FONT, fontSize: 14, fontWeight: '800', fill: '#ffffff', align: 'center' } });
     name.anchor.set(0.5);
     const mark = new Graphics();
-    float.addChild(glow, glass, icon, num, name, mark);
+    float.addChild(glow, face, glass, icon, num, name, mark);
     c.addChild(float);
     tileLayer.addChild(c);
-    return { c, float, glass, glow, icon, num, name, mark, item, w: 0, h: 0, lit: 0, glowNow: 0, phase: rng.next() * 6 };
+    return { c, float, glass, face, glow, icon, num, name, mark, item, w: 0, h: 0, lit: 0, glowNow: 0, phase: rng.next() * 6 };
   }
 
   function drawGlass(t: Tile, state: 'idle' | 'ok' | 'miss' | 'saying') {
     const hc = ctx.settings.highContrast;
     const g = t.glass;
     g.clear();
+    t.face.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // Raised tile; the one being named sinks in. Rims (plus the ✓ / – marks) keep the meaning.
+      const rim = state === 'ok' ? pal.accent : state === 'miss' ? '#ff9fb8' : state === 'saying' ? pal.accent2 : undefined;
+      setSoft(t.face, { width: Math.round(t.w), height: Math.round(t.h), radius: 20, base: surf, pressed: state === 'saying' || state === 'miss', rim, rimWidth: 2.5, depth: 7 });
+      return;
+    }
     const fill = hc ? 0x000000 : state === 'ok' ? 0x2a3a2c : state === 'miss' ? 0x3a2233 : 0x1a2446;
     g.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, 20).fill({ color: fill, alpha: hc ? 1 : 0.78 });
     if (!hc) g.moveTo(-t.w / 2 + 18, -t.h / 2 + 2.5).lineTo(t.w / 2 - 18, -t.h / 2 + 2.5).stroke({ width: 1.5, color: 0xffffff, alpha: 0.18 });
@@ -227,9 +260,18 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function drawBubble(text: string) {
     said.text = text;
     bubble.clear();
+    bubbleFace.visible = false;
     if (!text) return;
     const w = Math.min(safe.w - 36, said.width + 36);
     const h = said.height + 22;
+    if (ctx.settings.soft) {
+      // raised bubble (sizes snapped so few textures get cached) with its accent tail
+      bubbleFace.visible = true;
+      bubbleFace.position.set(said.x, said.y);
+      setSoft(bubbleFace, { width: Math.min(Math.floor(safe.w - 36), Math.ceil(w / 16) * 16), height: Math.ceil(h / 8) * 8, radius: 18, base: surf, depth: 6 });
+      bubble.poly([said.x - 9, said.y - h / 2 - 6, said.x + 9, said.y - h / 2 - 6, said.x, said.y - h / 2 - 15]).fill({ color: hex(pal.accent2), alpha: 0.8 });
+      return;
+    }
     bubble.roundRect(said.x - w / 2, said.y - h / 2, w, h, 18).fill({ color: 0x0c1330, alpha: ctx.settings.highContrast ? 1 : 0.72 });
     bubble.roundRect(said.x - w / 2, said.y - h / 2, w, h, 18).stroke({ width: 1.5, color: hex(pal.accent2), alpha: 0.6 });
     bubble.poly([said.x - 9, said.y - h / 2, said.x + 9, said.y - h / 2, said.x, said.y - h / 2 - 10]).fill({ color: hex(pal.accent2), alpha: 0.6 });
@@ -240,11 +282,20 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   let breathMax = 0;
   function drawBreath() {
     breath.clear();
+    breathTrack.visible = false;
     if (breathMax <= 0) return;
     const k = clamp(breathLeft / breathMax, 0, 1);
     const w = safe.w * 0.6;
     const x = safe.x + safe.w / 2 - w / 2;
     const y = tilesBottom + 18;
+    if (ctx.settings.soft) {
+      // inset groove (cached texture, same size every frame) with the accent fill inside
+      breathTrack.visible = true;
+      breathTrack.position.set(x + w / 2, y + 3);
+      setSoft(breathTrack, { width: Math.round(w + 8), height: 14, radius: 7, base: surf, pressed: true, depth: 3 });
+      if (k > 0) breath.roundRect(x, y, Math.max(6, w * k), 6, 3).fill({ color: hex(pal.accent2), alpha: 0.9 });
+      return;
+    }
     breath.roundRect(x, y, w, 6, 3).fill({ color: 0xffffff, alpha: 0.12 });
     breath.roundRect(x, y, w * k, 6, 3).fill({ color: hex(pal.accent2), alpha: 0.9 });
   }
@@ -450,7 +501,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     start() {
       void run();
     },
-    onSettings: () => layoutTiles(),
+    onSettings: () => {
+      layout();
+      drawBubble(said.text);
+    },
     destroy() {
       alive = false;
       stopAmbient?.();

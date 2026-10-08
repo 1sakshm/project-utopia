@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, easeOutCubic, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, easeOutCubic, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { CONCEPTS, type Concept } from './content';
 import { drawIcon } from './icons';
 
@@ -14,6 +14,7 @@ interface Card {
   float: Container;
   glow: Sprite;
   glass: Graphics;
+  face: Sprite;
   icon: Graphics;
   label: Text;
   key: Text;
@@ -27,6 +28,7 @@ interface Card {
 
 interface Speaker {
   c: Container;
+  well: Sprite;
   halo: Sprite;
   body: Graphics;
   badge: Text;
@@ -46,11 +48,25 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const HI = hex(pal.accent2);
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): cards and the speech bubble are extruded from one calm surface; speakers sit in inset wells.
+  const surf = mixHex(pal.bg, pal.bg2, 0.5);
+  const auroraBg = gradientTexture([
     [0, '#070a1a'],
     [0.5, '#171a3c'],
     [1, '#0b1022'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.28, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: ctx.quality.maxDpr });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const motes = new Container();
   const top = new Container();
   const cardLayer = new Container();
@@ -71,6 +87,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
   function makeSpeaker(label: string, color: number): Speaker {
     const c = new Container();
+    const well = new Sprite();
+    well.anchor.set(0.5);
     const halo = new Sprite(glowTexture(128, 0.25));
     halo.anchor.set(0.5);
     halo.tint = color;
@@ -78,9 +96,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const body = new Graphics();
     const badge = new Text({ text: label, style: { fontFamily: FONT, fontSize: 17, fontWeight: '900', fill: '#0b0d18' } });
     badge.anchor.set(0.5);
-    c.addChild(halo, body, badge);
+    c.addChild(well, halo, body, badge);
     top.addChild(c);
-    return { c, halo, body, badge, pulse: 0, color };
+    return { c, well, halo, body, badge, pulse: 0, color };
   }
   const spEn = makeSpeaker('EN', EN);
   const spHi = makeSpeaker('हि', HI);
@@ -89,12 +107,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   status.anchor.set(0.5);
   const bubble = new Container();
   const bubbleBg = new Graphics();
+  const bubbleFace = new Sprite();
+  bubbleFace.anchor.set(0.5);
   const bubbleWave = new Graphics();
   const bubbleText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 34, fontWeight: '800', fill: '#ffffff', align: 'center' } });
   bubbleText.anchor.set(0.5);
   const bubbleTag = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: '900', fill: '#0b0d18', letterSpacing: 1 } });
   bubbleTag.anchor.set(0.5);
-  bubble.addChild(bubbleBg, bubbleWave, bubbleText, bubbleTag);
+  bubble.addChild(bubbleFace, bubbleBg, bubbleWave, bubbleText, bubbleTag);
   bubble.alpha = 0;
   top.addChild(status, bubble);
 
@@ -114,6 +134,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     if (!hc) sp.body.circle(-r * 0.3, -r * 0.32, r * 0.3).fill({ color: 0xffffff, alpha: 0.45 });
     else sp.body.circle(0, 0, r).stroke({ width: 3, color: 0xffffff });
     sp.halo.scale.set((r * 3.2) / 128);
+    sp.well.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      const d = Math.round(r * 2 + 22);
+      setSoft(sp.well, { width: d, height: d, radius: d / 2, base: surf, pressed: true, depth: 5 });
+    }
   }
 
   function layout() {
@@ -121,8 +146,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = ctx.settings.soft ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
+    moteSprites.forEach((m, i) => (m.visible = !ctx.settings.soft || i % 2 === 0));
     const r = Math.min(30, safe.w * 0.075);
     const sy = Math.max(safe.y + safe.h * 0.2, 150);
     spEn.c.position.set(safe.x + 22 + r, sy);
@@ -144,8 +171,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const h = bubbleH;
     const g = bubbleBg;
     g.clear();
-    g.roundRect(-w / 2, -h / 2, w, h, 26).fill({ color: hc ? 0x000000 : 0x121633, alpha: hc ? 1 : 0.9 });
-    g.roundRect(-w / 2, -h / 2, w, h, 26).stroke({ width: hc ? 3 : 2, color: col, alpha: 0.95 });
+    bubbleFace.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // raised bubble, its language color kept as the rim (plus the tail and the EN/हि tag below)
+      setSoft(bubbleFace, { width: Math.round(w), height: h, radius: 26, base: surf, rim: left ? pal.accent : pal.accent2, rimWidth: 2, depth: 7 });
+    } else {
+      g.roundRect(-w / 2, -h / 2, w, h, 26).fill({ color: hc ? 0x000000 : 0x121633, alpha: hc ? 1 : 0.9 });
+      g.roundRect(-w / 2, -h / 2, w, h, 26).stroke({ width: hc ? 3 : 2, color: col, alpha: 0.95 });
+    }
     // tail pointing at its speaker
     const tx = left ? -w / 2 + 34 : w / 2 - 34;
     g.poly([tx - 10, -h / 2 + 1, tx + 10, -h / 2 + 1, tx + (left ? -12 : 12), -h / 2 - 16]).fill({ color: col, alpha: 0.95 });
@@ -202,23 +235,34 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     glow.blendMode = 'add';
     glow.alpha = 0;
     const glass = new Graphics();
+    const face = new Sprite();
+    face.anchor.set(0.5);
     const icon = new Graphics();
     const label = new Text({ text: '', style: { fontFamily: FONT, fontSize: 17, fontWeight: '800', fill: 'rgba(255,255,255,0.85)', align: 'center' } });
     label.anchor.set(0.5);
     const key = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.5)' } });
-    float.addChild(glow, glass, icon, label, key);
+    float.addChild(glow, face, glass, icon, label, key);
     c.addChild(float);
     c.eventMode = preview ? 'none' : 'static';
     c.cursor = 'pointer';
     c.on('pointertap', () => pick(i));
     cardLayer.addChild(c);
-    return { c, float, glow, glass, icon, label, key, concept, w: 0, h: 0, lit: 0, glowNow: 0, phase: rng.next() * 6 };
+    return { c, float, glow, glass, face, icon, label, key, concept, w: 0, h: 0, lit: 0, glowNow: 0, phase: rng.next() * 6 };
   }
 
   function drawCard(k: Card, state: 'idle' | 'ok' | 'wrong' | 'answer') {
     const hc = ctx.settings.highContrast;
     const g = k.glass;
     g.clear();
+    k.face.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // Raised card; the picked card sinks in. Rim keeps the meaning: highlight = right / the answer, pink = wrong.
+      const rim = state === 'ok' || state === 'answer' ? pal.highlight : state === 'wrong' ? '#ff9fb8' : undefined;
+      setSoft(k.face, { width: Math.round(k.w), height: Math.round(k.h), radius: 22, base: surf, pressed: state === 'ok' || state === 'wrong', rim, rimWidth: 3, depth: 8 });
+      k.label.style.fill = state === 'wrong' ? '#ffc2d2' : state === 'idle' ? 'rgba(255,255,255,0.85)' : pal.highlight;
+      return;
+    }
+    k.label.style.fill = 'rgba(255,255,255,0.85)';
     const fill = hc ? 0x000000 : state === 'ok' ? 0x1f3a3e : state === 'wrong' ? 0x3a2233 : 0x1a1f45;
     g.roundRect(-k.w / 2, -k.h / 2, k.w, k.h, 22).fill({ color: fill, alpha: hc ? 1 : 0.8 });
     if (!hc) g.moveTo(-k.w / 2 + 20, -k.h / 2 + 2.5).lineTo(k.w / 2 - 20, -k.h / 2 + 2.5).stroke({ width: 1.5, color: 0xffffff, alpha: 0.18 });

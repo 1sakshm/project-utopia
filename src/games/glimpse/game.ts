@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
-import { clamp, easeInOutSine, easeOutBack, hex, lerp, tween, TAU } from '@/sdk';
-import { createParticles, createPixiApp, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeInOutSine, easeOutBack, hex, lerp, mixHex, tween, TAU } from '@/sdk';
+import { createParticles, createPixiApp, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { CREATURES, CREATURE_NAME, drawCreature, starPoints, type Creature } from './creatures';
 
 const ROUNDS = 2;
@@ -59,6 +59,7 @@ type Phase = 'idle' | 'iris' | 'fix' | 'expose' | 'mask' | 'creature' | 'where' 
 interface Card {
   c: Container;
   bg: Graphics;
+  tile: Sprite;
   icon: Graphics;
   label: Text;
   key: Text;
@@ -173,9 +174,23 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     return t;
   };
 
+  // Soft (dark neumorphism) look: the lens housing becomes a raised soft bezel with the lens sunk into it, and the
+  // answer cards become raised tiles (picked = pressed in, coloured rim + mark keep right/wrong). The scene stays.
+  const soft = () => ctx.settings.soft;
+  const sres = ctx.quality.maxDpr;
+  const softBase = () => mixHex(theme.sky[1][1], '#000000', 0.12);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+
   // ---------------- scene graph
   const bg = new Sprite(Texture.WHITE);
   const bokehLayer = new Container();
+  const lensTile = new Sprite();
+  lensTile.anchor.set(0.5);
   const lensBack = new Graphics();
   const lensGlow = new Sprite(glowTexture(256, 0.3));
   lensGlow.anchor.set(0.5);
@@ -208,7 +223,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   grain.alpha = 0.05;
   grain.blendMode = 'add';
   const vignette = new Sprite(Texture.EMPTY);
-  app.stage.addChild(bg, bokehLayer, lensGlow, lensBack, petalLayer, scene, mask, fixation, irisG, housing, engrave, cardLayer, fx, grain, vignette, ghost);
+  app.stage.addChild(bg, bokehLayer, lensGlow, lensTile, lensBack, petalLayer, scene, mask, fixation, irisG, housing, engrave, cardLayer, fx, grain, vignette, ghost);
   const particles = createParticles(ctx, fx, 160);
 
   const prompt = new Text({ text: '', style: { fontFamily: FONT, fontSize: 20, fontWeight: '700', fill: 0xf6ead2, align: 'center' } });
@@ -324,22 +339,37 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     lensGlow.tint = theme.bokeh;
     lensGlow.alpha = hc ? 0 : 0.12;
     lensBack.clear();
+    lensTile.visible = soft();
+    if (soft()) {
+      const d = Math.round(R * 2.42);
+      setSoft(lensTile, { width: d, height: d, base: softBase(), radius: d / 2, depth: 10, resolution: sres });
+      lensTile.position.set(cx, cy);
+    }
     lensBack.circle(cx, cy, R * 1.08).fill({ color: hc ? 0x050505 : theme.lensBg });
+    if (soft()) {
+      // inset edge: dark top-left lip and a faint light bottom-right lip around the sunk lens
+      lensBack.circle(cx + 1.5, cy + 1.5, R * 1.08 - 2).stroke({ width: 7, color: 0x000000, alpha: 0.28 });
+      lensBack.circle(cx - 1, cy - 1, R * 1.08 + 1).stroke({ width: 1.5, color: 0xffffff, alpha: 0.07 });
+    }
     if (!hc) {
       for (let i = 1; i <= 3; i++) lensBack.circle(cx, cy, R * (0.28 + i * 0.22)).stroke({ width: 1, color: 0xffffff, alpha: 0.035 });
     }
     housing.clear();
-    housing.circle(cx, cy, R * 1.13).stroke({ width: R * 0.1, color: hc ? 0x222222 : theme.housing, alpha: 1 });
-    housing.circle(cx, cy, R * 1.08).stroke({ width: 2, color: hc ? 0xffffff : 0xfff2d8, alpha: hc ? 0.9 : 0.25 });
-    housing.circle(cx, cy, R * 1.185).stroke({ width: 1.5, color: 0xffffff, alpha: hc ? 0.6 : 0.12 });
+    if (soft()) {
+      housing.circle(cx, cy, R * 1.08).stroke({ width: 1.5, color: 0xfff2d8, alpha: 0.18 });
+    } else {
+      housing.circle(cx, cy, R * 1.13).stroke({ width: R * 0.1, color: hc ? 0x222222 : theme.housing, alpha: 1 });
+      housing.circle(cx, cy, R * 1.08).stroke({ width: 2, color: hc ? 0xffffff : 0xfff2d8, alpha: hc ? 0.9 : 0.25 });
+      housing.circle(cx, cy, R * 1.185).stroke({ width: 1.5, color: 0xffffff, alpha: hc ? 0.6 : 0.12 });
+    }
     for (let i = 0; i < 48; i++) {
       const a = (i / 48) * TAU;
       const r0 = R * 1.1;
       const r1 = R * (i % 6 === 0 ? 1.17 : 1.14);
       housing.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0).lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
     }
-    housing.stroke({ width: 1.5, color: 0xffffff, alpha: hc ? 0.7 : 0.22 });
-    if (!hc) {
+    housing.stroke({ width: 1.5, color: 0xffffff, alpha: hc ? 0.7 : soft() ? 0.16 : 0.22 });
+    if (!hc && !soft()) {
       // moveTo first so each glint arc starts a fresh sub-path (otherwise Pixi joins it to the last tick mark)
       const a1 = -Math.PI * 0.92;
       const a2 = -Math.PI * 0.86;
@@ -469,13 +499,15 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     cards = options.map((kind, i) => {
       const c = new Container();
       const bgG = new Graphics();
+      const tile = new Sprite();
+      tile.anchor.set(0.5);
       const icon = new Graphics();
       const label = new Text({ text: CREATURE_NAME[kind], style: { fontFamily: FONT, fontSize: 15 * ts(), fontWeight: '700', fill: 0xf6ead2 } });
       label.anchor.set(0.5);
       const key = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 12 * ts(), fontWeight: '800', fill: 0xcbbfa8 } });
       key.anchor.set(0.5);
       const mark = new Graphics();
-      c.addChild(bgG, icon, label, key, mark);
+      c.addChild(tile, bgG, icon, label, key, mark);
       c.eventMode = 'static';
       c.cursor = 'pointer';
       c.on('pointerdown', () => {
@@ -483,7 +515,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       });
       c.visible = false;
       cardLayer.addChild(c);
-      return { c, bg: bgG, icon, label, key, mark, kind };
+      return { c, bg: bgG, tile, icon, label, key, mark, kind };
     });
     positionCards();
   }
@@ -511,8 +543,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const h = cardH;
     cd.bg.clear();
     const border = state === 'correct' ? hex(pal.accent2) : hc ? 0xffffff : 0xf2d9a8;
-    cd.bg.roundRect(-w / 2, -h / 2, w, h, 16).fill({ color: hc ? 0x000000 : 0x1c1614, alpha: state === 'dim' ? 0.4 : 0.82 });
-    cd.bg.roundRect(-w / 2, -h / 2, w, h, 16).stroke({ width: state === 'correct' ? 3.5 : hc ? 2.5 : 1.5, color: border, alpha: state === 'dim' ? 0.25 : state === 'idle' ? 0.55 : 1 });
+    cd.tile.visible = soft();
+    if (soft()) {
+      // picked cards sink in; the rim (sea-green = right, warm = your wrong pick) plus the mark carry the meaning
+      const picked = state === 'correct' || state === 'wrong';
+      const rim = state === 'correct' ? pal.accent2 : state === 'wrong' ? '#f2d9a8' : undefined;
+      setSoft(cd.tile, { width: Math.round(w), height: Math.round(h), base: softBase(), radius: 18, depth: picked ? 2.5 : 6, rim, rimWidth: state === 'correct' ? 3 : 2, resolution: sres });
+      cd.tile.alpha = state === 'dim' ? 0.45 : 1;
+    } else {
+      cd.bg.roundRect(-w / 2, -h / 2, w, h, 16).fill({ color: hc ? 0x000000 : 0x1c1614, alpha: state === 'dim' ? 0.4 : 0.82 });
+      cd.bg.roundRect(-w / 2, -h / 2, w, h, 16).stroke({ width: state === 'correct' ? 3.5 : hc ? 2.5 : 1.5, color: border, alpha: state === 'dim' ? 0.25 : state === 'idle' ? 0.55 : 1 });
+    }
     cd.icon.clear();
     const s = Math.min(w, h) * 0.24;
     drawCreature(cd.icon, cd.kind, s, {

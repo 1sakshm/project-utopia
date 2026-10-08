@@ -10,7 +10,7 @@ import {
 } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, hex, lerp, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { EDGES, NODES, RING0, key, levelSpec, makeTrial, randomRune, type Glyph, type Trial } from './logic';
 import { causticTexture, rayTexture, vignetteTexture } from './art';
 
@@ -55,15 +55,33 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const ACCENT2 = hex(pal.accent2);
   const HI = hex(pal.highlight);
 
-  // ---------------------------------------------------------------- scene graph
-  const bg = new Sprite(
-    gradientTexture([
-      [0, '#0a3346'],
-      [0.35, '#072338'],
-      [0.75, '#041426'],
-      [1, '#02070f'],
-    ]),
-  );
+  // Soft (dark neumorphism) look: a calmer deep-water gradient (rays off, caustics dimmer) with the seal and the
+  // "Not here" button as extruded surfaces. The glyph field itself stays free-floating: cards behind up to 90 drifting
+  // glyphs would turn the search field into a grid and change the task.
+  const soft = () => ctx.settings.soft;
+  const SB = '#072436';
+  const SB2 = '#05182a';
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  const auroraBg = gradientTexture([
+    [0, '#0a3346'],
+    [0.35, '#072338'],
+    [0.75, '#041426'],
+    [1, '#02070f'],
+  ]);
+  const softBg = gradientTexture([
+    [0, '#082a3d'],
+    [0.2, SB],
+    [0.4, SB],
+    [0.85, SB2],
+    [1, SB2],
+  ]);
+  const bg = new Sprite(auroraBg);
   const blobs = new Container();
   const rays = new Container();
   const causticA = new TilingSprite({ texture: causticTexture(), width: 10, height: 10 });
@@ -149,6 +167,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   sealGlow.blendMode = 'add';
   sealGlow.tint = ACCENT2;
   const sealDisc = new Graphics();
+  const sealTile = new Sprite();
+  sealTile.anchor.set(0.5);
+  const sealWell = new Sprite();
+  sealWell.anchor.set(0.5);
   const sealTicks = new Graphics();
   const sealGlyph = new Graphics();
   const sealFlash = new Sprite(glowTexture(128, 0.3));
@@ -160,16 +182,18 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const multText = new Text({ text: '×1', style: { fontFamily: FONT, fontSize: 20, fontWeight: '800', fill: HI } });
   multText.anchor.set(0, 0.5);
   const pips = new Graphics();
-  seal.addChild(sealGlow, sealDisc, sealTicks, sealFlash, sealGlyph, sealLabel, multText, pips);
+  seal.addChild(sealGlow, sealTile, sealWell, sealDisc, sealTicks, sealFlash, sealGlyph, sealLabel, multText, pips);
   let sealR = 46;
 
   // ---------------------------------------------------------------- UI: "Not here" button, hint text, focus ring, ghost ripple
   const btn = new Container();
   const btnBg = new Graphics();
+  const btnTile = new Sprite();
+  btnTile.anchor.set(0.5);
   const btnIcon = new Graphics();
   const btnText = new Text({ text: 'Not here', style: { fontFamily: FONT, fontSize: 17, fontWeight: '800', fill: 0xffffff } });
   btnText.anchor.set(0, 0.5);
-  btn.addChild(btnBg, btnIcon, btnText);
+  btn.addChild(btnTile, btnBg, btnIcon, btnText);
   const hintText = new Text({
     text: '',
     style: { fontFamily: FONT, fontSize: 14, fontWeight: '700', fill: 0xbfe9ea, align: 'center' },
@@ -270,12 +294,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     H = l.height;
     safe = l.safe;
     const hc = ctx.settings.highContrast;
+    bg.texture = soft() ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
     bg.tint = hc ? 0x222222 : 0xffffff;
     vignette.width = W;
     vignette.height = H;
     vignette.visible = !hc;
+    vignette.alpha = soft() ? 0.55 : 1;
     for (const cs of [causticA, causticB]) {
       cs.width = W;
       cs.height = H;
@@ -288,9 +314,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     causticLow.position.set(W / 2, H / 2);
     causticA.tileScale.set(2.4);
     causticB.tileScale.set(3.4);
-    causticA.alpha = 0.07;
-    causticB.alpha = 0.05;
-    rays.visible = !hc && !low;
+    causticA.alpha = soft() ? 0.035 : 0.07;
+    causticB.alpha = soft() ? 0.025 : 0.05;
+    rays.visible = !hc && !low && !soft();
     blobs.visible = !hc;
     raySprites.forEach((s, i) => {
       s.x = W * (0.15 + i * (low ? 0.5 : 0.25));
@@ -320,8 +346,12 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     btn.position.set(safe.x + safe.w / 2, safe.y + safe.h - 46);
     btnRect = { x: btn.x - bw / 2, y: btn.y - bh / 2, w: bw, h: bh };
     btnBg.clear();
-    btnBg.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2).fill({ color: hc ? 0x000000 : 0x06202e, alpha: hc ? 1 : 0.7 });
-    btnBg.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : ACCENT, alpha: hc ? 1 : 0.7 });
+    btnTile.visible = soft();
+    if (soft()) setSoft(btnTile, { width: bw, height: bh, base: SB2, radius: bh / 2, depth: 6, resolution: sres });
+    else {
+      btnBg.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2).fill({ color: hc ? 0x000000 : 0x06202e, alpha: hc ? 1 : 0.7 });
+      btnBg.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2).stroke({ width: hc ? 3 : 1.5, color: hc ? 0xffffff : ACCENT, alpha: hc ? 1 : 0.7 });
+    }
     btnIcon.clear();
     btnIcon.circle(-bw / 2 + 30, 0, 9).stroke({ width: 2.4, color: 0xffffff });
     btnIcon.moveTo(-bw / 2 + 23, 7).lineTo(-bw / 2 + 37, -7).stroke({ width: 2.4, color: 0xffffff, cap: 'round' });
@@ -338,9 +368,18 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     sealGlow.scale.set((sealR * 4) / 256);
     sealGlow.alpha = hc ? 0 : 0.55;
     sealDisc.clear();
-    sealDisc.circle(0, 0, sealR).fill({ color: hc ? 0x000000 : 0x061a2a, alpha: hc ? 1 : 0.92 });
-    sealDisc.circle(0, 0, sealR).stroke({ width: hc ? 3 : 2, color: hc ? 0xffffff : ACCENT2, alpha: hc ? 1 : 0.85 });
-    sealDisc.circle(0, 0, sealR - 6).stroke({ width: 1, color: hc ? 0xffffff : ACCENT, alpha: hc ? 0.8 : 0.35 });
+    sealTile.visible = sealWell.visible = soft();
+    if (soft()) {
+      // a raised seal (violet rim) with the target glyph sitting in an inset well
+      const d = Math.round(sealR * 2);
+      setSoft(sealTile, { width: d, height: d, base: SB, radius: d / 2, rim: pal.accent2, rimWidth: 2, depth: 7, resolution: sres });
+      const dw = d - 16;
+      setSoft(sealWell, { width: dw, height: dw, base: SB, radius: dw / 2, pressed: true, depth: 5, resolution: sres });
+    } else {
+      sealDisc.circle(0, 0, sealR).fill({ color: hc ? 0x000000 : 0x061a2a, alpha: hc ? 1 : 0.92 });
+      sealDisc.circle(0, 0, sealR).stroke({ width: hc ? 3 : 2, color: hc ? 0xffffff : ACCENT2, alpha: hc ? 1 : 0.85 });
+      sealDisc.circle(0, 0, sealR - 6).stroke({ width: 1, color: hc ? 0xffffff : ACCENT, alpha: hc ? 0.8 : 0.35 });
+    }
     sealTicks.clear();
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
@@ -908,7 +947,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     plankton.visible = !hc;
     sealTicks.rotation = reduced ? 0 : s * 0.08;
     sealFlash.alpha = Math.max(0, sealFlash.alpha - dt / 500);
-    sealGlow.alpha = hc ? 0 : 0.45 + Math.sin(s * 1.2) * 0.08;
+    sealGlow.alpha = hc ? 0 : (0.45 + Math.sin(s * 1.2) * 0.08) * (sealTile.visible ? 0.5 : 1);
 
     // field
     const spec = trial ? levelSpec(stair.level) : null;

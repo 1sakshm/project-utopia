@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
-import { clamp, easeOutCubic, hex, tween, TAU } from '@/sdk';
-import { createParticles, createPixiApp, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutCubic, hex, mixHex, tween, TAU } from '@/sdk';
+import { createParticles, createPixiApp, glowTexture, gradientTexture, softShades, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { analyseContinuation, gauss, grade, GRADE_POINTS, median, roundSpec, windowsFor, type Grade, type RoundSpec } from './logic';
 
 const ROUNDS = 3;
@@ -132,9 +132,39 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   resultBig.anchor.set(0.5);
   const resultSmall = new Text({ text: '', style: { fontFamily: FONT, fontSize: 15, fontWeight: '600', fill: 0xd6e6f5, align: 'center' } });
   resultSmall.anchor.set(0.5);
-  result.addChild(resultG, resultBig, resultSmall);
+  // Soft (dark neumorphism) look: the steadiness dial becomes a raised disc with an inset track, the pattern strip a
+  // raised pill with inset beat wells, and the phase caption sits on a soft plate on the sand. The seascape stays.
+  const soft = () => ctx.settings.soft;
+  const SEA_BASE = '#0b1d35';
+  const SAND_BASE = '#141a2c';
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  // Inset well drawn with plain Graphics from softShades (cheap, redrawn only on layout/state changes):
+  // a dark rim on the top-left fading to the face colour, with a faint light lip on the bottom-right.
+  function softWell(g: Graphics, x: number, y: number, w: number, h: number, r: number, base: string, d = 3) {
+    const sh = softShades(base);
+    g.roundRect(x, y, w, h, r).fill({ color: mixHex(base, '#000000', 0.42) });
+    g.roundRect(x + d * 0.35, y + d * 0.35, w - d * 0.35, h - d * 0.35, Math.max(0, r - d * 0.2)).fill({ color: mixHex(base, '#000000', 0.22) });
+    g.roundRect(x + d * 0.75, y + d * 0.75, w - d * 0.75, h - d * 0.75, Math.max(0, r - d * 0.4)).fill({ color: mixHex(base, '#000000', 0.08) });
+    g.roundRect(x, y, w, h, r).stroke({ width: 1, color: sh.light, alpha: 0.45 });
+  }
+  const newTile = () => {
+    const t = new Sprite();
+    t.anchor.set(0.5);
+    t.visible = false;
+    return t;
+  };
+  const resultTile = newTile();
+  const patternTile = newTile();
+  const phasePlate = newTile();
+  result.addChild(resultTile, resultG, resultBig, resultSmall);
   result.alpha = 0;
-  ui.addChild(phaseText, subText, countText, patternG, result);
+  ui.addChild(phasePlate, phaseText, subText, countText, patternTile, patternG, result);
 
   // ---------------- layout
   let W = 0;
@@ -240,6 +270,16 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     resultBig.style.fontSize = 30 * ts();
     resultSmall.style.fontSize = 15 * ts();
     for (const r of ratingPool) r.t.style.fontSize = 26 * ts();
+    phasePlate.visible = soft();
+    if (soft()) {
+      const pw = Math.round(Math.min(safe.w - 40, 320));
+      setSoft(phasePlate, { width: pw, height: 66, base: SAND_BASE, radius: 22, depth: 7, resolution: sres });
+      phasePlate.position.set(cx, safe.y + safe.h - 66);
+      const n = 8;
+      const gap = Math.min(34, (safe.w - 60) / n);
+      setSoft(patternTile, { width: Math.round(gap * (n - 1) + 36), height: 34, base: SAND_BASE, radius: 17, depth: 5, resolution: sres });
+      patternTile.position.set(cx, safe.y + safe.h - 78 - 44 + 4);
+    }
   }
 
   // ---------------- audio (own synthesis, lookahead-scheduled on the AudioContext clock)
@@ -879,6 +919,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
     // pattern strip
     patternG.clear();
+    patternTile.visible = false;
     if (p && p.kind === 'round' && p.spec.pattern) {
       const b = (vt - p.origin) / p.T;
       const seg = segAt(p, Math.floor(b));
@@ -888,10 +929,18 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         const x0 = cx - (gap * (n - 1)) / 2;
         const y = phaseText.y - 44;
         const slot = seg === 'pattern' ? Math.floor((b - p.bPattern) * 2) % 8 : -1;
+        patternTile.visible = soft();
         for (let i = 0; i < n; i++) {
           const on = p.spec.pattern[i] === 1;
           const x = x0 + i * gap;
           const active = i === slot;
+          if (soft()) {
+            // every beat is an inset well; taps light up inside it (filled = tap, empty = rest), the playhead gets a ring
+            softWell(patternG, x - 9, y - 9, 18, 18, 9, SAND_BASE, 3);
+            if (on) patternG.circle(x, y, active ? 7 : 5.5).fill({ color: CYAN, alpha: active ? 1 : 0.8 });
+            if (active) patternG.circle(x, y, 11).stroke({ width: 1.5, color: 0xffffff, alpha: 0.85 });
+            continue;
+          }
           if (on) patternG.circle(x, y, active ? 9 : 7).fill({ color: hc ? 0xffffff : CYAN, alpha: active ? 1 : 0.7 });
           else patternG.circle(x, y, 5).stroke({ width: 1.5, color: 0xffffff, alpha: active ? 0.9 : 0.35 });
           if (i % 2 === 0) patternG.rect(x - 1, y + 14, 2, 5).fill({ color: 0xffffff, alpha: 0.35 });
@@ -965,13 +1014,23 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const hc = ctx.settings.highContrast;
     resultG.clear();
     const R = Math.min(60, safe.w * 0.15);
-    resultG.circle(0, 0, R).fill({ color: 0x051222, alpha: 0.55 });
-    resultG.circle(0, 0, R).stroke({ width: 6, color: 0xffffff, alpha: 0.12 });
+    resultTile.visible = soft();
+    if (soft()) {
+      const d = Math.round(R * 2 + 26);
+      setSoft(resultTile, { width: d, height: d, base: SEA_BASE, radius: d / 2, depth: 8, resolution: sres });
+      // inset groove for the steadiness arc
+      const sh = softShades(SEA_BASE);
+      resultG.circle(0, 0, R).stroke({ width: 9, color: mixHex(SEA_BASE, '#000000', 0.4) });
+      resultG.circle(0.8, 0.8, R + 4.5).stroke({ width: 1, color: sh.light, alpha: 0.5 });
+    } else {
+      resultG.circle(0, 0, R).fill({ color: 0x051222, alpha: 0.55 });
+      resultG.circle(0, 0, R).stroke({ width: 6, color: 0xffffff, alpha: 0.12 });
+    }
     if (steady > 0) resultG.moveTo(0, -R).arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + (TAU * steady) / 100).stroke({ width: 6, color: hc ? 0xffffff : CYAN, alpha: 0.95, cap: 'round' });
     resultBig.text = valid ? `${steady}%` : '—';
     resultBig.position.set(0, -4);
     resultSmall.text = valid ? `Steady · drift ${drift > 0 ? '+' : ''}${drift.toFixed(1)}%${Math.abs(drift) >= 2 ? (drift < 0 ? ' (sped up)' : ' (slowed)') : ''}` : 'Keep tapping when the music fades';
-    resultSmall.position.set(0, R + 18);
+    resultSmall.position.set(0, R + (soft() ? 34 : 18));
     ctx.caption(valid ? `Steady ${steady}%` : 'No steady beat detected');
     ctx.announce(valid ? `Steadiness ${steady} percent` : 'Keep tapping when the music fades');
     if (valid && steady >= 75) {

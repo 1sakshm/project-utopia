@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
 import { WORDS } from './content';
 
@@ -11,6 +11,7 @@ const TRIALS = 10;
 interface Tile {
   c: Container;
   bg: Graphics;
+  face: Sprite;
   label: Text;
   key: Text;
   badge: Text;
@@ -29,11 +30,29 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(64, 'majorPenta');
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): tiles are extruded from one calm surface color; the background settles onto it.
+  const surf = mixHex(pal.bg, pal.bg2, 0.55);
+  const res = ctx.quality.maxDpr;
+  const auroraBg = gradientTexture([
     [0, '#050b18'],
     [0.5, '#0d2238'],
     [1, '#0a1628'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.3)],
+    [0.42, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  /** Inset well the orb sits in (soft only). */
+  const well = new Sprite();
+  well.anchor.set(0.5);
+  function setSoftSprite(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: res });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const motes = new Container();
   const orbLayer = new Container();
   const tileLayer = new Container();
@@ -50,7 +69,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   caption.anchor.set(0.5);
   const status = new Text({ text: '', style: { fontFamily: FONT, fontSize: 18, fontWeight: '800', fill: pal.highlight, align: 'center', letterSpacing: 2 } });
   status.anchor.set(0.5);
-  orbLayer.addChild(halo, rings, core, caption, status);
+  orbLayer.addChild(well, halo, rings, core, caption, status);
 
   const moteSprites: Sprite[] = [];
   for (let i = 0; i < Math.round(36 * ctx.quality.particleScale) + 8; i++) {
@@ -84,12 +103,29 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     orbX = safe.x + safe.w / 2;
     orbY = safe.y + safe.h * 0.27;
     halo.position.set(orbX, orbY);
+    well.position.set(orbX, orbY);
+    applyLook();
     core.position.set(orbX, orbY);
     rings.position.set(orbX, orbY);
     caption.position.set(orbX, orbY + orbR + 38);
     status.position.set(orbX, orbY - orbR - 46);
     moteSprites.forEach((m, i) => m.position.set(((i * 7919) % 1000) / 1000 * W, ((i * 104729) % 1000) / 1000 * H));
     layoutTiles();
+  }
+
+  function applyLook() {
+    const soft = ctx.settings.soft;
+    bg.texture = soft ? softBg : auroraBg;
+    bg.width = W;
+    bg.height = H;
+    well.visible = soft;
+    if (soft) {
+      const d = Math.round(orbR * 2 + 56);
+      setSoftSprite(well, { width: d, height: d, radius: d / 2, base: surf, pressed: true, depth: 7 });
+    }
+    moteSprites.forEach((m) => (m.visible = true));
+    // calmer field in soft: every other mote
+    if (soft) moteSprites.forEach((m, i) => (m.visible = i % 2 === 0));
   }
 
   function drawCore() {
@@ -103,23 +139,35 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function makeTile(word: string, i: number): Tile {
     const c = new Container();
     const bgG = new Graphics();
+    const face = new Sprite();
+    face.anchor.set(0.5);
     const style: TextStyleOptions = { fontFamily: FONT, fontSize: 22, fontWeight: '800', fill: '#ffffff', align: 'center' };
     const label = new Text({ text: word, style });
     label.anchor.set(0.5);
     const key = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 13, fontWeight: '800', fill: 'rgba(255,255,255,0.55)' } });
     const badge = new Text({ text: '', style: { fontFamily: FONT, fontSize: 16, fontWeight: '900', fill: '#0b0d14' } });
     badge.anchor.set(0.5);
-    c.addChild(bgG, label, key, badge);
+    c.addChild(face, bgG, label, key, badge);
     c.eventMode = preview ? 'none' : 'static';
     c.cursor = 'pointer';
     c.on('pointertap', () => tap(i));
     tileLayer.addChild(c);
-    return { c, bg: bgG, label, key, badge, word, w: 0, h: 0 };
+    return { c, bg: bgG, face, label, key, badge, word, w: 0, h: 0 };
   }
 
   function drawTile(t: Tile, state: 'idle' | 'on' | 'wrong' | 'hint') {
     const hc = ctx.settings.highContrast;
     t.bg.clear();
+    t.face.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // Raised when idle, pressed in once tapped; the rim + numbered badge carry correct / wrong / hint.
+      const rim = state === 'on' ? pal.accent : state === 'wrong' ? '#ff9fb8' : state === 'hint' ? pal.accent2 : undefined;
+      setSoftSprite(t.face, { width: Math.round(t.w), height: Math.round(t.h), radius: 20, base: surf, pressed: state === 'on' || state === 'wrong', rim, rimWidth: 2.5, depth: 6 });
+      t.label.style.fill = state === 'on' ? pal.accent : state === 'hint' ? pal.accent2 : state === 'wrong' ? '#ffc2d2' : '#ffffff';
+      t.badge.style.fill = state === 'hint' ? pal.accent2 : state === 'wrong' ? '#ffc2d2' : pal.accent;
+      return;
+    }
+    t.badge.style.fill = '#0b0d14';
     const fill = state === 'on' ? hex(pal.accent) : state === 'wrong' ? 0x3a2233 : state === 'hint' ? hex(pal.accent2) : hc ? 0x000000 : 0x14304a;
     t.bg.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, 20).fill({ color: fill, alpha: state === 'idle' ? 0.82 : 0.95 });
     t.bg.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, 20).stroke({ width: hc ? 3 : 1.5, color: state === 'wrong' ? 0xff9fb8 : 0xffffff, alpha: hc ? 1 : 0.28 });
@@ -408,6 +456,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       void run();
     },
     onSettings: () => {
+      applyLook();
       drawCore();
       layoutTiles();
     },

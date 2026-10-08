@@ -5,6 +5,7 @@ import type { GameContext, GameInstance } from '@/sdk';
 import { damp } from '@/sdk';
 import { mountR3F, useGame, GameEffects, Motes, GradientSky, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
 import { levelDef, makeSequence, scoreFor, SLOTS, SLOT_ORDER } from './logic';
+import { clay, puckGeometry, shade } from './soft';
 
 const FLOWER_COLORS = ['#b99cff', '#6fe3ff', '#ffb3d1', '#ffe08a', '#8dffc4', '#ff9f7a', '#9fb4ff', '#f7a8ff', '#a8fff0'];
 const HC_COLOR = '#ffffff';
@@ -291,14 +292,26 @@ function Scene({
   const ctx = useGame();
   useSyncExternalStore(view.subscribe, view.getVersion);
   const pal = ctx.manifest.palette;
+  const soft = ctx.settings.soft;
   return (
     <>
       <CameraRig />
-      <fog attach="fog" args={['#1c1646', 11, 26]} />
+      <fog attach="fog" args={['#1c1646', soft ? 16 : 11, soft ? 34 : 26]} />
       <GradientSky top={pal.bg} bottom="#3b2a74" />
-      <ambientLight intensity={0.25} color="#8a8cff" />
-      <hemisphereLight args={['#6b6bd6', '#0b0d1f', 0.5]} />
-      <directionalLight position={[-4, 8, 3]} intensity={0.9} color="#c9d4ff" />
+      {soft ? (
+        <>
+          {/* Soft clay: even sky fill + one gentle key from the top-left, no harsh rim. */}
+          <ambientLight intensity={0.3} color="#9a9cff" />
+          <hemisphereLight args={['#b4b2f2', '#0b0d1f', 1.1]} />
+          <directionalLight position={[-5, 7, 3]} intensity={1.3} color="#e6e8ff" />
+        </>
+      ) : (
+        <>
+          <ambientLight intensity={0.25} color="#8a8cff" />
+          <hemisphereLight args={['#6b6bd6', '#0b0d1f', 0.5]} />
+          <directionalLight position={[-4, 8, 3]} intensity={0.9} color="#c9d4ff" />
+        </>
+      )}
       <Moon view={view} />
       <Ground />
       <Grass />
@@ -311,7 +324,7 @@ function Scene({
       ))}
       <Motes count={90} area={[12, 4, 10]} color={pal.highlight} size={0.07} />
       <ParticleBurst ref={(h) => { burstRef.current = h; }} max={300} size={0.1} />
-      <GameEffects bloom={1.1} threshold={0.25} />
+      <GameEffects bloom={soft ? 0.75 : 1.1} threshold={soft ? 0.35 : 0.25} />
     </>
   );
 }
@@ -358,6 +371,21 @@ function Moon({ view }: { view: View }) {
 }
 
 function Ground() {
+  const ctx = useGame();
+  if (ctx.settings.soft) return <SoftGround />;
+  return <ShaderGround />;
+}
+
+/** Soft look: the garden is a matte clay plate pressed out of the night, with a rounded rim. */
+function SoftGround() {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg;
+  const geo = useMemo(() => puckGeometry(7.2, 0.35, 0.3, 72), []);
+  const mat = useMemo(() => clay(shade(bg, 0.2), { roughness: 0.95 }), [bg]);
+  return <mesh geometry={geo} material={mat} position={[0, -0.34, 0]} />;
+}
+
+function ShaderGround() {
   const ctx = useGame();
   const mat = useMemo(
     () =>
@@ -408,7 +436,11 @@ function Grass() {
   };
   return (
     <instancedMesh ref={setRef} args={[geo, undefined, count]}>
-      <meshStandardMaterial color="#1c3f47" emissive="#12303a" emissiveIntensity={0.5} roughness={1} />
+      {ctx.settings.soft ? (
+        <meshStandardMaterial color="#3b4a68" roughness={1} />
+      ) : (
+        <meshStandardMaterial color="#1c3f47" emissive="#12303a" emissiveIntensity={0.5} roughness={1} />
+      )}
     </instancedMesh>
   );
 }
@@ -514,6 +546,9 @@ function Flower({ index, view, onTap }: { index: number; view: View; onTap: (i: 
     [color, index],
   );
   const numTex = useMemo(() => numberTexture(index + 1), [index]);
+  const bg = ctx.manifest.palette.bg;
+  const plinthGeo = useMemo(() => puckGeometry(0.52, 0.2, 0.1, 36), []);
+  const plinthMat = useMemo(() => clay(shade(bg, 0.3)), [bg]);
   const pos = useRef(new THREE.Vector3(...slotPos(view, index)));
   const t = useRef(Math.random() * 10);
   const grow = useRef(0);
@@ -549,6 +584,7 @@ function Flower({ index, view, onTap }: { index: number; view: View; onTap: (i: 
 
   return (
     <group ref={group}>
+      {ctx.settings.soft && <mesh geometry={plinthGeo} material={plinthMat} />}
       <mesh position={[0, 0.45, 0]}>
         <cylinderGeometry args={[0.025, 0.035, 0.9, 6]} />
         <meshStandardMaterial color="#2b6b5a" emissive="#12352c" roughness={0.9} />

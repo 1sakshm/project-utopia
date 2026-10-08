@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, easeOutCubic, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, easeOutCubic, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { similarity, words } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { LEVEL_NAMES, PROMPTS } from './content';
@@ -15,6 +15,7 @@ const RIBBON_N = 140;
 interface Chip {
   c: Container;
   bg: Graphics;
+  face: Sprite;
   label: Text;
   w: number;
   h: number;
@@ -86,11 +87,27 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(64, 'majorPenta');
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): bubble and word chips are extruded from one calm surface, the ribbon runs in an inset channel.
+  const surf = mixHex(pal.bg, pal.bg2, 0.45);
+  const auroraBg = gradientTexture([
     [0, '#040915'],
     [0.5, '#121838'],
     [1, '#07101f'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.3, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  const channel = new Sprite();
+  channel.anchor.set(0.5);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: ctx.quality.maxDpr });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const skyGlow = new Sprite(glowTexture(256, 0.2));
   skyGlow.anchor.set(0.5);
   skyGlow.tint = hex(pal.accent2);
@@ -108,7 +125,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const heardLayer = new Container();
   const ui = new Container();
   const fx = new Container();
-  app.stage.addChild(bg, skyGlow, motes, ribbonGlow, ribbon, pen, chipLayer, heardLayer, ui, fx);
+  app.stage.addChild(bg, skyGlow, motes, channel, ribbonGlow, ribbon, pen, chipLayer, heardLayer, ui, fx);
   const particles = createParticles(ctx, fx, 220);
 
   const status = new Text({ text: '', style: { fontFamily: FONT, fontSize: 18, fontWeight: '800', fill: pal.highlight, align: 'center', letterSpacing: 2 } });
@@ -125,11 +142,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   heardLabel.anchor.set(0.5);
   const bubble = new Container();
   const bubbleBg = new Graphics();
+  const bubbleFace = new Sprite();
+  bubbleFace.anchor.set(0.5);
   const bubbleText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 20, fontWeight: '800', fill: '#ffffff', align: 'center', wordWrap: true, wordWrapWidth: 280 } });
   bubbleText.anchor.set(0.5);
   const bubbleLabel = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.6)', letterSpacing: 2 } });
   bubbleLabel.anchor.set(0.5);
-  bubble.addChild(bubbleBg, bubbleLabel, bubbleText);
+  bubble.addChild(bubbleFace, bubbleBg, bubbleLabel, bubbleText);
   bubble.visible = false;
   ui.addChild(status, levelTag, phrase, pct, verdict, heardLabel, bubble);
 
@@ -166,8 +185,6 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
-    bg.width = W;
-    bg.height = H;
     cx = safe.x + safe.w / 2;
     skyGlow.position.set(cx, safe.y + safe.h * 0.34);
     skyGlow.scale.set(Math.max(W, H) / 180);
@@ -180,6 +197,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ribX0 = safe.x + 20;
     ribW = safe.w - 40;
     ribA = Math.min(safe.h * 0.065, 52);
+    applyLook();
     pct.position.set(cx, safe.y + safe.h * 0.47);
     verdict.position.set(cx, pct.y + 34);
     chipsTop = safe.y + safe.h * 0.55;
@@ -191,11 +209,37 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     positionReplay();
   }
 
+  function applyLook() {
+    const soft = ctx.settings.soft;
+    bg.texture = soft ? softBg : auroraBg;
+    bg.width = W;
+    bg.height = H;
+    skyGlow.alpha = soft ? 0.08 : 0.14;
+    moteSprites.forEach((m, i) => (m.visible = !soft || i % 2 === 0));
+    channel.visible = soft;
+    // soft: the phrase sits on top of the channel and grows upwards, so a wrapped phrase never overlaps it
+    phrase.anchor.set(0.5, soft ? 1 : 0.5);
+    phrase.position.set(cx, soft ? ribY - ribA - 30 : safe.y + safe.h * 0.235);
+    if (soft) {
+      channel.position.set(cx, ribY);
+      setSoft(channel, { width: Math.round(safe.w - 16), height: Math.round(ribA * 2 + 40), radius: 26, base: surf, pressed: true, depth: 7 });
+    }
+  }
+
   function drawBubble() {
     const bw = Math.min(safe.w - 36, Math.max(210, bubbleText.width + 60));
     const bh = Math.max(64, bubbleText.height + 40);
     const hc = ctx.settings.highContrast;
     bubbleBg.clear();
+    bubbleFace.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // sizes snapped so the cached textures stay few while the transcript types in
+      const w = Math.min(Math.floor(safe.w - 36), Math.ceil(bw / 16) * 16);
+      setSoft(bubbleFace, { width: w, height: Math.ceil(bh / 8) * 8, radius: 22, base: surf, depth: 7 });
+      bubbleLabel.position.set(0, -bh / 2 + 13);
+      bubbleText.position.set(0, 8);
+      return;
+    }
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).fill({ color: hc ? 0x000000 : 0x161a3c, alpha: 0.84 });
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).stroke({ width: hc ? 3 : 1.5, color: 0xffffff, alpha: hc ? 1 : 0.3 });
     bubbleLabel.position.set(0, -bh / 2 + 13);
@@ -212,11 +256,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function makeChip(parent: Container, text: string, size: number): Chip {
     const c = new Container();
     const b = new Graphics();
+    const face = new Sprite();
+    face.anchor.set(0.5);
+    face.visible = false;
     const label = new Text({ text, style: { fontFamily: FONT, fontSize: size, fontWeight: '800', fill: '#ffffff' } });
     label.anchor.set(0.5);
-    c.addChild(b, label);
+    c.addChild(face, b, label);
     parent.addChild(c);
-    return { c, bg: b, label, w: label.width + size * 1.1, h: size * 2 };
+    return { c, bg: b, face, label, w: label.width + size * 1.1, h: size * 2 };
   }
 
   function drawChip(ch: Chip, state: 'idle' | 'match' | 'miss' | 'heardOk' | 'heardNo') {
@@ -224,6 +271,16 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const b = ch.bg;
     b.clear();
     const r = ch.h / 2;
+    ch.face.visible = false;
+    if (ctx.settings.soft && (state === 'match' || state === 'miss' || state === 'idle')) {
+      // Raised pill; a matched word gets an accent rim + accent label, a missed one sinks in with a pink rim.
+      ch.w = Math.ceil(ch.w / 8) * 8;
+      ch.face.visible = true;
+      const rim = state === 'match' ? pal.accent : state === 'miss' ? '#ff9fc0' : undefined;
+      setSoft(ch.face, { width: ch.w, height: Math.round(ch.h), radius: r, base: surf, pressed: state === 'miss', rim, rimWidth: 2, depth: 5 });
+      ch.label.style.fill = state === 'match' ? pal.accent : state === 'miss' ? '#ffc4d8' : '#ffffff';
+      return;
+    }
     if (state === 'match') {
       b.roundRect(-ch.w / 2, -ch.h / 2, ch.w, ch.h, r).fill({ color: hex(pal.accent), alpha: 0.95 });
       ch.label.style.fill = '#06201c';

@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
-import { clamp, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softShades, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 
 type Kind = 'firefly' | 'moth';
 
@@ -61,7 +61,29 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const jarGlow = new Sprite(glowTexture(128, 0.3));
   jarGlow.anchor.set(0.5);
   jarGlow.tint = hex(pal.accent);
-  jar.addChild(jarGlow, jarFill, jarGlass);
+  // Soft (dark neumorphism) look: the jar sits on a raised meadow-dark plinth and fills inside an inset glass well.
+  const soft = () => ctx.settings.soft;
+  const SOFT_BASE = '#132830';
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  // Inset well drawn with plain Graphics from softShades (cheap, redrawn only on layout/state changes):
+  // a dark rim on the top-left fading to the face colour, with a faint light lip on the bottom-right.
+  function softWell(g: Graphics, x: number, y: number, w: number, h: number, r: number, base: string, d = 3) {
+    const sh = softShades(base);
+    g.roundRect(x, y, w, h, r).fill({ color: mixHex(base, '#000000', 0.42) });
+    g.roundRect(x + d * 0.35, y + d * 0.35, w - d * 0.35, h - d * 0.35, Math.max(0, r - d * 0.2)).fill({ color: mixHex(base, '#000000', 0.22) });
+    g.roundRect(x + d * 0.75, y + d * 0.75, w - d * 0.75, h - d * 0.75, Math.max(0, r - d * 0.4)).fill({ color: mixHex(base, '#000000', 0.08) });
+    g.roundRect(x, y, w, h, r).stroke({ width: 1, color: sh.light, alpha: 0.45 });
+  }
+  const jarPlinth = new Sprite();
+  jarPlinth.anchor.set(0.5);
+  const jarWell = new Graphics();
+  jar.addChild(jarPlinth, jarGlow, jarWell, jarFill, jarGlass);
 
   let W = 0;
   let H = 0;
@@ -102,12 +124,23 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     drawGrass(grassBack, H * 0.6, H * 0.12, 70, hc ? 0x111111 : 0x1a2c3a, 1, bladesSeed);
     drawGrass(grassMid, H * 0.78, H * 0.14, 50, hc ? 0x0a0a0a : 0x10222a, 1, bladesSeed + 7);
     drawGrass(grassFront, H * 0.97, H * 0.1, 36, hc ? 0x000000 : 0x08161b, 1, bladesSeed + 13);
-    const jx = safe.x + safe.w - 46;
-    const jy = safe.y + safe.h - 70;
+    const jx = safe.x + safe.w - (soft() ? 54 : 46);
+    const jy = safe.y + safe.h - (soft() ? 76 : 70);
     jar.position.set(jx, jy);
     jarGlass.clear();
-    jarGlass.roundRect(-22, -34, 44, 64, 10).stroke({ width: 2.5, color: 0xe8f4ff, alpha: 0.7 });
-    jarGlass.roundRect(-14, -42, 28, 9, 3).fill({ color: 0xb7a07a, alpha: 0.9 });
+    jarPlinth.visible = jarWell.visible = soft();
+    if (soft()) {
+      setSoft(jarPlinth, { width: 72, height: 100, base: SOFT_BASE, radius: 22, depth: 7, resolution: sres });
+      jarPlinth.y = -5;
+      jarWell.clear();
+      softWell(jarWell, -22, -34, 44, 64, 12, SOFT_BASE, 4);
+      // a thin glass rim and the brass lid keep it reading as a jar
+      jarGlass.roundRect(-22, -34, 44, 64, 12).stroke({ width: 1.5, color: 0xe8f4ff, alpha: 0.5 });
+      jarGlass.roundRect(-14, -44, 28, 8, 4).fill({ color: 0xc9b183, alpha: 0.95 });
+    } else {
+      jarGlass.roundRect(-22, -34, 44, 64, 10).stroke({ width: 2.5, color: 0xe8f4ff, alpha: 0.7 });
+      jarGlass.roundRect(-14, -42, 28, 9, 3).fill({ color: 0xb7a07a, alpha: 0.9 });
+    }
     drawJar();
   }
 

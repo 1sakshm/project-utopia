@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
 import { clamp, easeOutBack, easeOutCubic, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
 import { PACK } from './content';
 
@@ -31,6 +31,9 @@ type Face = 'idle' | 'happy' | 'oops' | 'wink';
 interface Btn {
   c: Container;
   bg: Graphics;
+  tile: Sprite;
+  /** Soft look: which texture the tile shows now (0 raised, 1 pressed, 2 lit rim), to swap only on change. */
+  tileState: number;
   shape: Graphics;
   label: Text;
   key: Text;
@@ -49,12 +52,40 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   if (preview) stair.set(3);
   const note = ctx.audio.scale(67, 'majorPenta');
 
-  // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (dark neumorphism) look: the night sky settles into one calm indigo the shape pads are extruded from.
+  const soft = () => ctx.settings.soft;
+  const SB = '#15133a';
+  const sres = ctx.quality.maxDpr;
+  const auroraBg = gradientTexture([
     [0, '#07061a'],
     [0.5, '#17143a'],
     [1, '#0c0a24'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, '#07061a'],
+    [0.42, SB],
+    [1, SB],
+  ]);
+  function setSoft(s: Sprite, o: SoftTileOptions) {
+    s.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    s.width = o.width + p * 2;
+    s.height = o.height + p * 2;
+  }
+  const softOpts = (b: { w: number; h: number }, i: number, st: number): SoftTileOptions => ({
+    width: b.w,
+    height: b.h,
+    base: SB,
+    radius: 26,
+    pressed: st === 1,
+    rim: st === 2 ? '#' + SHAPE_COLORS[i].toString(16).padStart(6, '0') : undefined,
+    rimWidth: 3,
+    depth: 8,
+    resolution: sres,
+  });
+
+  // ---- scene
+  const bg = new Sprite(auroraBg);
   const stars = new Graphics();
   const motes = new Container();
   const lunaLayer = new Container();
@@ -116,13 +147,15 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const btns: Btn[] = [0, 1, 2, 3].map((i) => {
     const c = new Container();
     const bgG = new Graphics();
+    const tile = new Sprite();
+    tile.anchor.set(0.5);
     const shape = new Graphics();
     const label = new Text({ text: '', style: { fontFamily: FONT, fontSize: 20, fontWeight: '800', fill: '#ffffff' } });
     label.anchor.set(0.5);
     const key = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 13, fontWeight: '800', fill: 'rgba(255,255,255,0.55)' } });
-    c.addChild(bgG, shape, label, key);
+    c.addChild(tile, bgG, shape, label, key);
     btnLayer.addChild(c);
-    return { c, bg: bgG, shape, label, key, w: 0, h: 0, press: 0, glow: 0 };
+    return { c, bg: bgG, tile, tileState: 0, shape, label, key, w: 0, h: 0, press: 0, glow: 0 };
   });
 
   let W = 0;
@@ -138,6 +171,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = soft() ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
     LR = Math.min(safe.w * 0.15, 64);
@@ -218,8 +252,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     btns.forEach((b, i) => {
       const { w, h } = b;
       b.bg.clear();
-      b.bg.roundRect(-w / 2, -h / 2, w, h, 26).fill({ color: hc ? 0x000000 : 0x1b1945, alpha: 0.85 });
-      b.bg.roundRect(-w / 2, -h / 2, w, h, 26).stroke({ width: hc ? 3 : 1.5, color: 0xffffff, alpha: hc ? 1 : 0.25 });
+      b.tile.visible = soft();
+      if (soft()) {
+        b.tileState = 0;
+        setSoft(b.tile, softOpts(b, i, 0));
+      } else {
+        b.bg.roundRect(-w / 2, -h / 2, w, h, 26).fill({ color: hc ? 0x000000 : 0x1b1945, alpha: 0.85 });
+        b.bg.roundRect(-w / 2, -h / 2, w, h, 26).stroke({ width: hc ? 3 : 1.5, color: 0xffffff, alpha: hc ? 1 : 0.25 });
+      }
       const r = Math.min(h * 0.24, w * 0.22);
       b.shape.clear();
       shapePath(b.shape, i, r);
@@ -639,9 +679,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       timerRing.moveTo(0, bob - LR - 12).arc(0, bob, LR + 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * timerK).stroke({ width: 5, color: hex(pal.accent), alpha: 0.9, cap: 'round' });
     }
     // buttons: press + glow
-    btns.forEach((b) => {
+    btns.forEach((b, i) => {
       b.press = Math.max(0, b.press - dt / 220);
       b.glow = Math.max(0, b.glow - dt / 500);
+      if (b.tile.visible) {
+        // soft: the pad sinks while pressed and lights a rim in its shape's color on a correct tap (cached textures)
+        const st = b.press > 0.2 ? 1 : b.glow > 0.15 ? 2 : 0;
+        if (st !== b.tileState) {
+          b.tileState = st;
+          b.tile.texture = softTileTexture(softOpts(b, i, st));
+        }
+      }
       b.c.scale.set(1 - b.press * 0.06 + b.glow * 0.04);
       b.shape.rotation = reduced ? 0 : Math.sin(t * 1.5 + b.c.x) * 0.04;
     });

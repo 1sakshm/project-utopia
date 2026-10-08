@@ -5,6 +5,8 @@ import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, damp, easeOutCubic } from '@/sdk';
 import { mountR3F, useGame, GameEffects, GradientSky, Motes, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
 import { DIM_NAMES, TRIALS, levelDef, makeExamples, makeCrystal, portalFor, pickNewRule, streakMult, type Spec } from './logic';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { clay, puckGeometry, shade } from './soft';
 
 const PATTERN_COLORS = ['#7fe8ff', '#ff9ad8', '#ffd68a'];
 const PORTAL_COLORS = ['#a58bff', '#5ff2d6'];
@@ -432,6 +434,7 @@ function Scene({ view, burstRef, onPortal }: { view: View; burstRef: { current: 
   const ctx = useGame();
   useSyncExternalStore(view.subscribe, view.getVersion);
   const hc = ctx.settings.highContrast;
+  const soft = ctx.settings.soft;
   useFrame((state) => {
     sharedTime.value = ctx.settings.reducedMotion ? 0 : state.clock.elapsedTime;
   });
@@ -441,6 +444,7 @@ function Scene({ view, burstRef, onPortal }: { view: View; burstRef: { current: 
       {!hc && <fog attach="fog" args={['#140f2c', 12, 30]} />}
       <GradientSky top="#07061a" bottom="#2a1b52" />
       <ambientLight intensity={0.3} color="#9a8cff" />
+      {soft && <hemisphereLight args={['#b9adff', '#0a0818', 0.75]} />}
       <directionalLight position={[-3, 6, 5]} intensity={0.9} color="#ffe9d0" />
       <Temple />
       <Floor view={view} />
@@ -458,7 +462,7 @@ function Scene({ view, burstRef, onPortal }: { view: View; burstRef: { current: 
         max={260}
         size={0.1}
       />
-      <GameEffects bloom={1.1} threshold={0.35} />
+      <GameEffects bloom={soft ? 0.85 : 1.1} threshold={soft ? 0.42 : 0.35} />
     </>
   );
 }
@@ -483,6 +487,7 @@ function CameraRig() {
 function Temple() {
   const ctx = useGame();
   const hc = ctx.settings.highContrast;
+  const soft = ctx.settings.soft;
   const pillars = useMemo(() => {
     const out: Array<[number, number]> = [];
     for (const x of [-3.6, -2.2, 2.2, 3.6]) out.push([x, -4.5]);
@@ -552,7 +557,10 @@ function Temple() {
             <planeGeometry args={[1.3, 9]} />
           </mesh>
         ))}
-      {pillars.map(([x, z], i) => (
+      {pillars.map(([x, z], i) =>
+        soft ? (
+          <SoftPillar key={i} x={x} z={z} />
+        ) : (
         <group key={i} position={[x, 1.5, z]}>
           <mesh>
             <cylinderGeometry args={[0.32, 0.36, 7, 8]} />
@@ -567,7 +575,8 @@ function Temple() {
             <meshBasicMaterial color={hc ? '#ffffff' : '#9f86ff'} transparent opacity={0.6} />
           </mesh>
         </group>
-      ))}
+        ),
+      )}
       {/* hanging crystal lamps */}
       {[-2.1, 2.1].map((x, i) => (
         <group key={i} position={[x, 4.1, -3]}>
@@ -637,7 +646,55 @@ function Floor({ view }: { view: View }) {
   );
 }
 
+/** Soft look: matte clay column on a rounded plinth, carved from the temple's own violet. */
+function SoftPillar({ x, z }: { x: number; z: number }) {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  const parts = useMemo(
+    () => ({
+      shaft: new THREE.CylinderGeometry(0.32, 0.36, 7, 24),
+      plinth: new RoundedBoxGeometry(0.95, 0.3, 0.95, 3, 0.1),
+      mat: clay(shade(bg, 0.16), { roughness: 0.92 }),
+      plinthMat: clay(shade(bg, 0.24), { roughness: 0.92 }),
+    }),
+    [bg],
+  );
+  return (
+    <group position={[x, 1.5, z]}>
+      <mesh geometry={parts.shaft} material={parts.mat} />
+      <mesh position={[0, -3.35, 0]} geometry={parts.plinth} material={parts.plinthMat} />
+    </group>
+  );
+}
+
+/** Soft look: the crystal rests on a two-tier rounded clay plinth. */
+function SoftPedestal() {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  const parts = useMemo(
+    () => ({
+      low: puckGeometry(0.72, 0.4, 0.14, 48),
+      top: puckGeometry(0.56, 0.08, 0.04, 48),
+      lowMat: clay(shade(bg, 0.4)),
+      topMat: clay(shade(bg, 0.5)),
+    }),
+    [bg],
+  );
+  return (
+    <group position={[REST[0], FLOOR_Y, REST[2]]}>
+      <mesh geometry={parts.low} material={parts.lowMat} />
+      <mesh position={[0, 0.39, 0]} geometry={parts.top} material={parts.topMat} />
+      <mesh position={[0, 0.475, 0]} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[0.36, 0.42, 48]} />
+        <meshBasicMaterial color="#ffe3a3" transparent opacity={0.55} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function Pedestal() {
+  const ctx = useGame();
+  if (ctx.settings.soft) return <SoftPedestal />;
   return (
     <group position={[REST[0], FLOOR_Y, REST[2]]}>
       <mesh position={[0, 0.2, 0]}>
@@ -734,6 +791,7 @@ function Portal({ side, view, onPortal }: { side: 0 | 1; view: View; onPortal: (
         <mesh material={disc}>
           <circleGeometry args={[PORTAL_R, 48]} />
         </mesh>
+        {ctx.settings.soft && <SoftPortalFrame />}
         <mesh>
           <torusGeometry args={[PORTAL_R, 0.045, 10, 72]} />
           <meshBasicMaterial ref={ringMat} color={color} transparent />
@@ -764,6 +822,14 @@ function Portal({ side, view, onPortal }: { side: 0 | 1; view: View; onPortal: (
       </sprite>
     </group>
   );
+}
+
+/** Soft look: a thick matte clay rim the portal is set into (the coloured ring stays on top of it). */
+function SoftPortalFrame() {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  const parts = useMemo(() => ({ geo: new THREE.TorusGeometry(PORTAL_R + 0.16, 0.12, 16, 72), mat: clay(shade(bg, 0.46)) }), [bg]);
+  return <mesh geometry={parts.geo} material={parts.mat} position={[0, 0, -0.1]} />;
 }
 
 function Beams({ side, view }: { side: number; view: View }) {

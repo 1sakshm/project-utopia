@@ -534,6 +534,13 @@ function Scene({
       {view.blooms.map((b) => (
         <SmallLotus key={b.spot} spot={b.spot} t0={b.t0} />
       ))}
+      {ctx.settings.soft && (
+        <>
+          {/* Soft look: only the clay lily pads are lit materials; everything else stays unlit. */}
+          <hemisphereLight args={['#c8d4ff', '#050817', 0.8]} />
+          <directionalLight position={[-4, 7, 5]} intensity={0.9} color="#e8ecff" />
+        </>
+      )}
       <Pads />
       <Water view={view} />
       <GuideRing view={view} />
@@ -970,9 +977,35 @@ function SmallLotus({ spot, t0 }: { spot: number; t0: number }) {
   );
 }
 
+/** Soft look: a lily pad as a soft clay leaf, with a rounded bevelled edge and the notch kept. */
+const softPadGeos = new Map<number, THREE.ExtrudeGeometry>();
+function softPadGeometry(r: number) {
+  let g = softPadGeos.get(r);
+  if (!g) {
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0);
+    sh.absarc(0, 0, r - 0.035, 0.25, Math.PI * 2 - 0.25, false);
+    sh.lineTo(0, 0);
+    g = new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.035, bevelSegments: 3, curveSegments: 40 });
+    softPadGeos.set(r, g);
+  }
+  return g;
+}
+
+function SoftLilyPad({ x, z, r, rot }: { x: number; z: number; r: number; rot: number }) {
+  return (
+    <group position={[x, 0.03, z]} rotation={[-Math.PI / 2, 0, rot]}>
+      <mesh geometry={softPadGeometry(r)} renderOrder={3}>
+        <meshStandardMaterial color="#2a5a50" roughness={0.95} metalness={0} />
+      </mesh>
+    </group>
+  );
+}
+
 function LilyPad({ x, z, r, rot }: { x: number; z: number; r: number; rot: number }) {
   const ctx = useGame();
   const hc = ctx.settings.highContrast;
+  if (ctx.settings.soft) return <SoftLilyPad x={x} z={z} r={r} rot={rot} />;
   return (
     <group position={[x, 0.012, z]} rotation={[-Math.PI / 2, 0, rot]}>
       <mesh renderOrder={3}>

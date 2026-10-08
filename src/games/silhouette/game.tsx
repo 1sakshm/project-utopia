@@ -717,6 +717,7 @@ function Gallery({ view }: { view: View }) {
   const ctx = useGame();
   const hc = ctx.settings.highContrast;
   const tex = useMemo(() => plasterTexture(), []);
+  const soft = ctx.settings.soft;
   const pool = useRef<THREE.Mesh>(null);
   useFrame(() => {
     if (pool.current) (pool.current.material as THREE.MeshBasicMaterial).opacity = hc ? 0 : 0.22 * view.lamp + view.matched * 0.12;
@@ -741,7 +742,7 @@ function Gallery({ view }: { view: View }) {
       {/* floor */}
       <mesh rotation-x={-Math.PI / 2} position={[0, FLOOR_Y, 2]} receiveShadow>
         <planeGeometry args={[30, 14]} />
-        <meshStandardMaterial color={hc ? '#222222' : '#5a4448'} roughness={0.55} metalness={0.05} />
+        <meshStandardMaterial color={hc ? '#222222' : '#5a4448'} roughness={soft ? 0.9 : 0.55} metalness={soft ? 0 : 0.05} />
       </mesh>
       {/* museum placard */}
       <mesh position={[2.4, SH_Y - 1.45, WALL_Z + 0.02]}>
@@ -823,16 +824,35 @@ function Plinth({ x, w }: { x: number; w: number }) {
   const ctx = useGame();
   const hc = ctx.settings.highContrast;
   const h = PLINTH_TOP - FLOOR_Y;
+  const soft = ctx.settings.soft;
+  const softGeo = useMemo(
+    () => (soft ? { body: new RoundedBoxGeometry(w, h, w, 4, 0.12), cap: new RoundedBoxGeometry(w + 0.12, 0.1, w + 0.12, 3, 0.045) } : null),
+    [soft, w, h],
+  );
   return (
     <group position={[x, 0, 0]}>
-      <mesh position={[0, FLOOR_Y + h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, w]} />
-        <meshStandardMaterial color={hc ? '#dddddd' : '#efe4d8'} roughness={0.8} />
-      </mesh>
-      <mesh position={[0, PLINTH_TOP + 0.03, 0]} receiveShadow>
-        <boxGeometry args={[w + 0.12, 0.06, w + 0.12]} />
-        <meshStandardMaterial color={hc ? '#ffffff' : '#f8f0e6'} roughness={0.7} />
-      </mesh>
+      {soft ? (
+        <>
+          {/* Soft look: pillowy clay plinth with rounded edges and a rounded cap. */}
+          <mesh position={[0, FLOOR_Y + h / 2, 0]} geometry={softGeo!.body} castShadow receiveShadow>
+            <meshStandardMaterial color="#efe4d8" roughness={0.95} />
+          </mesh>
+          <mesh position={[0, PLINTH_TOP + 0.03, 0]} geometry={softGeo!.cap} receiveShadow>
+            <meshStandardMaterial color="#f8f0e6" roughness={0.9} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh position={[0, FLOOR_Y + h / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[w, h, w]} />
+            <meshStandardMaterial color={hc ? '#dddddd' : '#efe4d8'} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, PLINTH_TOP + 0.03, 0]} receiveShadow>
+            <boxGeometry args={[w + 0.12, 0.06, w + 0.12]} />
+            <meshStandardMaterial color={hc ? '#ffffff' : '#f8f0e6'} roughness={0.7} />
+          </mesh>
+        </>
+      )}
       {/* soft contact blob (reads even without shadow maps) */}
       <mesh position={[0, PLINTH_TOP + 0.065, 0]} rotation-x={-Math.PI / 2}>
         <planeGeometry args={[w * 0.9, w * 0.9]} />

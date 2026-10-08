@@ -9,7 +9,7 @@ export interface Settings {
   previewStyle: 'auto' | 'live' | 'still';
   textScale: number;
   readingFont: 'default' | 'atkinson';
-  /** App look: 'soft' = neumorphism (light, extruded surfaces); 'aurora' = the original dark glass look. */
+  /** App look: 'soft' = dark neumorphism (extruded surfaces, also inside games); 'aurora' = the original glass look. */
   uiStyle: 'soft' | 'aurora';
   flashIntensity: 'normal' | 'reduced' | 'none';
   master: number;
@@ -124,5 +124,6 @@ export function toGameSettings(s: Settings = useSettings.getState()): GameSettin
     readingFont: s.readingFont,
     textScale: s.textScale,
     leftHanded: s.leftHanded,
+    soft: s.uiStyle === 'soft' && !s.highContrast,
   };
 }

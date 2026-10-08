@@ -21,7 +21,7 @@ const MAX_STT_BYTES = 600 * 1024; // ~18s of 16 kHz mono 16-bit WAV
  * spending cap in the Sarvam dashboard (see docs/PRD_HARDENING.md H1).
  */
 const hits = new Map<string, number[]>();
-const LIMITS = { tts: 40, stt: 20 } as const; // requests per IP per minute that reach Sarvam
+const LIMITS = { tts: 120, stt: 20 } as const; // requests per IP per minute that reach Sarvam (games prefetch a round of TTS at once)
 export function rateLimited(req: Request, kind: keyof typeof LIMITS, now = Date.now()): boolean {
   const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   const k = `${kind}:${ip}`;

@@ -5,6 +5,7 @@ import type { GameContext, GameInstance } from '@/sdk';
 import { damp, mixHex, clamp, easeInOutSine } from '@/sdk';
 import { mountR3F, useGame, GameEffects, Motes, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
 import { levelDef, makeLayout, makeSequence, scoreFor, assignKeys, keyLabel, KEY_ROWS, MAX_LANTERNS, MAX_LEVEL, FIELD_D } from './logic';
+import { clay, puckGeometry, shade } from './soft';
 
 const LANTERN_COLORS = ['#ffb35c', '#ff8fa3', '#7fe0b0'];
 const HC_GLOW = '#fff1c9';
@@ -537,12 +538,13 @@ function Scene({ view, onTap, burstRef }: { view: View; onTap: (i: number) => vo
   const hc = ctx.settings.highContrast;
   const backdrop = useRef<THREE.Group>(null);
   const moon = useRef<THREE.Group>(null);
-  const geo = useMemo(() => lanternGeometry(), []);
+  const soft = ctx.settings.soft;
+  const geo = useMemo(() => lanternGeometry(soft), [soft]);
   return (
     <>
       <CameraRig backdrop={backdrop} moon={moon} />
       <ambientLight intensity={hc ? 0.7 : 0.4} color="#7d8fd6" />
-      <hemisphereLight args={['#8ea4ff', '#0a0f22', 0.45]} />
+      <hemisphereLight args={['#8ea4ff', '#0a0f22', soft ? 0.8 : 0.45]} />
       <directionalLight position={[-3, 6, -8]} intensity={0.9} color="#c8d6ff" />
       <directionalLight position={[2, 5, 6]} intensity={0.25} color="#ffd9a8" />
       <group ref={backdrop}>
@@ -568,7 +570,7 @@ function Scene({ view, onTap, burstRef }: { view: View; onTap: (i: number) => vo
       <FocusRing view={view} />
       {!hc && <Motes count={45} area={[9, 2.2, 8]} color="#ffd68a" size={0.07} speed={0.2} />}
       <ParticleBurst ref={(h) => { burstRef.current = h; }} max={260} size={0.12} />
-      <GameEffects bloom={1.2} threshold={0.3} />
+      <GameEffects bloom={soft ? 0.9 : 1.2} threshold={soft ? 0.36 : 0.3} />
     </>
   );
 }
@@ -791,9 +793,11 @@ interface LanternGeo {
   paper: THREE.BufferGeometry;
   cap: THREE.BufferGeometry;
   base: THREE.BufferGeometry;
+  /** Soft look only: a matte clay float the lantern rests on. */
+  float?: THREE.BufferGeometry;
 }
 
-function lanternGeometry(): LanternGeo {
+function lanternGeometry(soft = false): LanternGeo {
   const prof: THREE.Vector2[] = [];
   const pts: Array<[number, number]> = [
     [0.13, 0.0],
@@ -810,6 +814,12 @@ function lanternGeometry(): LanternGeo {
   const paper = new THREE.LatheGeometry(prof, 28);
   paper.translate(0, 0.09, 0);
   paper.scale(1.25, 1.45, 1.25);
+  if (soft) {
+    // Soft look: rounded clay cap and foot instead of hard-edged wood rings (centred like the originals).
+    const cap = puckGeometry(0.18, 0.075, 0.035, 24).translate(0, -0.0375, 0);
+    const base = puckGeometry(0.3, 0.1, 0.045, 28).translate(0, -0.05, 0);
+    return { paper, cap, base, float: puckGeometry(0.5, 0.07, 0.035, 36) };
+  }
   const cap = new THREE.CylinderGeometry(0.17, 0.17, 0.06, 20);
   const base = new THREE.CylinderGeometry(0.26, 0.3, 0.08, 6);
   return { paper, cap, base };
@@ -842,11 +852,12 @@ function Lantern({ index, view, onTap, geo }: { index: number; view: View; onTap
     });
     const rpaper = paper.clone();
     const wood = new THREE.MeshStandardMaterial({ color: hc ? '#e8e8e8' : '#6a4a3c', emissive: new THREE.Color(glow), emissiveIntensity: 0, roughness: 0.9, transparent: true });
+    const floatM = clay(shade('#2a3045', 0.08), { transparent: true, opacity: 0, roughness: 0.95 });
     const haloM = new THREE.SpriteMaterial({ map: softDotTexture(), color: glow, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const rhaloM = haloM.clone();
     const poolM = new THREE.MeshBasicMaterial({ map: softDotTexture(), color: glow, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const streakM = new THREE.MeshBasicMaterial({ map: streakTexture(), color: glow, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    return { paper, rpaper, wood, haloM, rhaloM, poolM, streakM };
+    return { paper, rpaper, wood, haloM, rhaloM, poolM, streakM, floatM };
   }, [tex, glow, hc]);
   const lab = useRef<{ code: string; tex: THREE.Texture | null }>({ code: '', tex: null });
   const labMat = useMemo(() => new THREE.SpriteMaterial({ transparent: true, depthTest: false }), []);
@@ -930,6 +941,7 @@ function Lantern({ index, view, onTap, geo }: { index: number; view: View; onTap
     rhalo.current?.scale.set(hs * 0.9, hs * 0.9, 1);
     const onWater = state === 1 ? 1 - rp : 1;
     mats.poolM.opacity = alpha * onWater * (0.05 + Math.max(L, s.mirror) * 0.45);
+    mats.floatM.opacity = s.appear * onWater;
     mats.streakM.opacity = alpha * onWater * Math.max(L * 0.35, s.mirror * 0.8);
     if (pool.current) pool.current.scale.setScalar(1.6 + L * 0.7);
 
@@ -969,6 +981,7 @@ function Lantern({ index, view, onTap, geo }: { index: number; view: View; onTap
           <sprite ref={rhalo} position={[0, 0.62, 0]} material={mats.rhaloM} renderOrder={-3} />
         </group>
       </group>
+      {geo.float && <mesh geometry={geo.float} material={mats.floatM} position={[0, -0.035, 0]} />}
       <mesh ref={pool} rotation-x={-Math.PI / 2} position={[0, 0.012, 0]} material={mats.poolM} renderOrder={1}>
         <planeGeometry args={[1, 1]} />
       </mesh>

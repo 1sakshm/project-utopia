@@ -1,6 +1,7 @@
 import { useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { tween, easeOutBack, easeInOutSine, damp } from '@/sdk';
 import { mountR3F, useGame, GameEffects, GradientSky, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
@@ -808,13 +809,23 @@ function Lantern() {
 // --- pillars + tap targets
 function PillarBed({ view, onDown, onUp }: { view: View; onDown: (i: number) => void; onUp: (i: number) => void }) {
   const n = view.caps.length;
+  const soft = useGame().settings.soft;
+  const slabW = spacing(n) * n + 0.3;
+  // Soft look: the slab is a pillowy clay board with rounded edges.
+  const softSlab = useMemo(() => (soft ? new RoundedBoxGeometry(slabW, 0.14, 1.9, 3, 0.06) : null), [soft, slabW]);
   return (
     <group>
       {/* stone slab under the pillars */}
-      <mesh position={[0, 0.05, PILLAR_Z]}>
-        <boxGeometry args={[spacing(n) * n + 0.3, 0.14, 1.9]} />
-        <meshStandardMaterial color="#b3a6c8" roughness={0.85} />
-      </mesh>
+      {softSlab ? (
+        <mesh position={[0, 0.05, PILLAR_Z]} geometry={softSlab}>
+          <meshStandardMaterial color="#b3a6c8" roughness={0.95} />
+        </mesh>
+      ) : (
+        <mesh position={[0, 0.05, PILLAR_Z]}>
+          <boxGeometry args={[slabW, 0.14, 1.9]} />
+          <meshStandardMaterial color="#b3a6c8" roughness={0.85} />
+        </mesh>
+      )}
       {view.caps.map((cap, i) => (
         <Pillar key={`${n}-${i}`} index={i} cap={cap} n={n} view={view} onDown={onDown} onUp={onUp} />
       ))}
@@ -1029,6 +1040,9 @@ function Terrace({ view }: { view: View }) {
   );
   const w = miniSp(view.caps.length) * view.caps.length + 0.9;
   const blockTex = useMemo(() => blockTexture(), []);
+  const soft = ctx.settings.soft;
+  // Soft look: rounded clay rim around the goal pool.
+  const softRim = useMemo(() => (soft ? { long: new RoundedBoxGeometry(w + 0.6, 0.18, 0.2, 3, 0.07), side: new RoundedBoxGeometry(0.2, 0.18, 2.4, 3, 0.07) } : null), [soft, w]);
   const pads = view.pads;
   useFrame((s, dt) => {
     water.uniforms.t.value = ctx.settings.reducedMotion ? 0 : s.clock.elapsedTime;
@@ -1055,15 +1069,15 @@ function Terrace({ view }: { view: View }) {
           [0, 0.09, 1.1, w + 0.6, 0.2],
           [0, 0.09, -1.1, w + 0.6, 0.2],
         ].map(([x, y, z, sx, sz], k) => (
-          <mesh key={k} position={[x, y, z]}>
-            <boxGeometry args={[sx, 0.18, sz]} />
-            <meshStandardMaterial color={hc ? '#888888' : '#e2d6ec'} roughness={0.8} />
+          <mesh key={k} position={[x, y, z]} {...(soft ? { geometry: softRim!.long } : {})}>
+            {!soft && <boxGeometry args={[sx, 0.18, sz]} />}
+            <meshStandardMaterial color={hc ? '#888888' : '#e2d6ec'} roughness={soft ? 0.95 : 0.8} />
           </mesh>
         ))}
         {[-1, 1].map((sd) => (
-          <mesh key={sd} position={[sd * (w / 2 + 0.2), 0.09, 0]}>
-            <boxGeometry args={[0.2, 0.18, 2.4]} />
-            <meshStandardMaterial color={hc ? '#888888' : '#e2d6ec'} roughness={0.8} />
+          <mesh key={sd} position={[sd * (w / 2 + 0.2), 0.09, 0]} {...(soft ? { geometry: softRim!.side } : {})}>
+            {!soft && <boxGeometry args={[0.2, 0.18, 2.4]} />}
+            <meshStandardMaterial color={hc ? '#888888' : '#e2d6ec'} roughness={soft ? 0.95 : 0.8} />
           </mesh>
         ))}
         {/* goal stones standing in the pool + their reflection */}

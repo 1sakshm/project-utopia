@@ -20,7 +20,7 @@ const step = async (name, fn) => {
     await fn();
     console.log('✓', name);
   } catch (e) {
-    console.log('✗', name, String(e).slice(0, 300));
+    console.log('✗', name, String(e).slice(0, 1500));
     errors.push(`${name}: ${String(e).slice(0, 200)}`);
   }
 };

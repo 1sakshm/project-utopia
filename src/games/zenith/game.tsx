@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, damp } from '@/sdk';
 import { mountR3F, useGame, GameEffects, GradientSky, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
+import { clay, shade } from './soft';
 import {
   RING_R,
   MAX_WAVES,
@@ -507,7 +508,7 @@ function Scene({ view, burstRef, onPlaneDown }: { view: View; burstRef: { curren
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
-      <GameEffects bloom={ctx.settings.highContrast ? 0.6 : 1.2} threshold={0.3} />
+      <GameEffects bloom={ctx.settings.highContrast ? 0.6 : ctx.settings.soft ? 0.95 : 1.2} threshold={ctx.settings.soft ? 0.36 : 0.3} />
     </>
   );
 }
@@ -827,6 +828,12 @@ function Ring({ index, view }: { index: number; view: View }) {
       }),
     [R, index],
   );
+  const soft = ctx.settings.soft;
+  // Soft look: each orbit rides in a matte clay groove (a rounded torus under the glowing track).
+  const softTrack = useMemo(
+    () => (soft ? { geo: new THREE.TorusGeometry(R, 0.12, 14, 160), mat: clay(shade(ctx.manifest.palette.bg2, 0.16), { transparent: true, opacity: 0, roughness: 0.9 }) } : null),
+    [soft, R, ctx.manifest.palette.bg2],
+  );
   const gateHalf = useRef(0.2);
   const beacon = useRef<THREE.Sprite>(null);
   const chevron = useRef<THREE.Mesh>(null);
@@ -858,6 +865,10 @@ function Ring({ index, view }: { index: number; view: View }) {
     const glow = nearTau < 0.7 ? clamp(1 - Math.abs(nearTau) / 0.7, 0, 1) : 0;
     u.uGlow.value += (glow - u.uGlow.value) * damp(12, dt);
     const vis = view.ringVis[index];
+    if (softTrack) {
+      softTrack.mat.opacity = vis;
+      softTrack.mat.visible = vis > 0.01;
+    }
     if (beacon.current) {
       const bm = beacon.current.material as THREE.SpriteMaterial;
       bm.opacity = vis * (0.22 + u.uGlow.value * 0.45 + u.uPulse.value * 0.8);
@@ -868,6 +879,7 @@ function Ring({ index, view }: { index: number; view: View }) {
   });
   return (
     <group>
+      {softTrack && <mesh geometry={softTrack.geo} material={softTrack.mat} position={[0, 0, -0.14]} renderOrder={0} />}
       <mesh material={mat} renderOrder={1}>
         <ringGeometry args={[R - 0.42, R + 0.42, 220, 1]} />
       </mesh>

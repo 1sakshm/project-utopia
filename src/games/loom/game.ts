@@ -1,7 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, lerp, tween, TAU } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTile, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { describeRule, generate, type Puzzle, type Tile } from './logic';
 
 const MIN_PUZZLES = 8;
@@ -96,12 +96,34 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const fabric = fabricTexture();
   const sheen = sheenTexture();
 
-  // ---------------------------------------------------------------- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (dark neumorphism) look: a calm plum ground; the matrix cells become inset wells the cloth tiles are inlaid
+  // in, the candidate tray is an inset tray and the candidates are raised tiles on it.
+  const soft = () => S.soft;
+  const SB = '#1f1322';
+  const softOpts = (size: number, pressed: boolean): SoftTileOptions => ({
+    width: size,
+    height: size,
+    base: SB,
+    radius: Math.max(3, size * 0.07) + 2,
+    pressed,
+    depth: Math.max(4, Math.min(8, size * 0.07)),
+    resolution: dpr,
+  });
+  /** Grid tiles are drawn a little smaller than their cell in soft mode so the well's inner shadow shows round them. */
+  const gridTileSize = () => (soft() ? Math.round(gridGeom.size * 0.88) : gridGeom.size);
+  const auroraBg = gradientTexture([
     [0, '#1c1020'],
     [0.5, '#24142a'],
     [1, '#120b12'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, '#170d19'],
+    [0.3, SB],
+    [1, SB],
+  ]);
+
+  // ---------------------------------------------------------------- scene
+  const bg = new Sprite(auroraBg);
   const vignette = new Sprite(glowTexture(256, 0.5));
   vignette.anchor.set(0.5);
   vignette.tint = 0x6a3a5a;
@@ -191,7 +213,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const h = size / 2;
     const rad = Math.max(3, size * 0.07);
     const base = new Graphics();
-    if (detail) base.roundRect(-h + 2, -h + 4, size, size, rad).fill({ color: 0x000000, alpha: 0.35 });
+    if (detail && !soft()) base.roundRect(-h + 2, -h + 4, size, size, rad).fill({ color: 0x000000, alpha: 0.35 });
     base.roundRect(-h, -h, size, size, rad).fill({ color: hc ? 0x000000 : clothColor });
     c.addChild(base);
     if (!hc && detail) {
@@ -338,13 +360,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = soft() ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
     vignette.position.set(W / 2, safe.y + safe.h * 0.38);
     vignette.scale.set((Math.max(W, H) * 1.1) / 256);
-    vignette.alpha = S.highContrast ? 0 : 0.18;
+    vignette.alpha = S.highContrast ? 0 : soft() ? 0.07 : 0.18;
     lattice.clear();
-    if (!S.highContrast) {
+    if (!S.highContrast && !soft()) {
       // faint diamond lattice, like a woven ground cloth
       const step = 38;
       for (let x = -H; x < W + H; x += step) {
@@ -376,7 +399,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const wood = hc ? 0x444444 : 0x6b4526;
     const woodDark = hc ? 0xffffff : 0x3d2412;
     frameBack.clear();
-    frameBack.roundRect(x0 - 4, yTop - 6, x1 - x0 + 8, yBot - yTop + 16, 14).fill({ color: 0x000000, alpha: hc ? 0 : 0.25 });
+    if (!soft()) frameBack.roundRect(x0 - 4, yTop - 6, x1 - x0 + 8, yBot - yTop + 16, 14).fill({ color: 0x000000, alpha: hc ? 0 : 0.25 });
     warp.clear();
     const threads = Math.round(total / 7);
     for (let i = 0; i <= threads; i++) {
@@ -417,6 +440,16 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     slotPulse = null;
     if (!puzzle) return;
     const p = puzzle;
+    if (soft()) {
+      for (let r = 0; r < p.n; r++) {
+        for (let c = 0; c < p.n; c++) {
+          const well = softTile(softOpts(gridGeom.size, true));
+          const pos = cellPos(r, c);
+          well.position.set(pos.x, pos.y);
+          gridLayer.addChild(well);
+        }
+      }
+    }
     for (let r = 0; r < p.n; r++) {
       for (let c = 0; c < p.n; c++) {
         const pos = cellPos(r, c);
@@ -438,7 +471,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
           slotPulse = pulse;
           continue;
         }
-        const tile = buildTile(p.grid[r][c], gridGeom.size, cloth);
+        const tile = buildTile(p.grid[r][c], gridTileSize(), cloth);
         tile.position.set(pos.x, pos.y);
         gridLayer.addChild(tile);
       }
@@ -449,10 +482,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const hc = S.highContrast;
     const h = size / 2;
     g.clear();
-    g.roundRect(-h, -h, size, size, size * 0.07).fill({ color: 0x000000, alpha: hc ? 1 : 0.35 });
+    // soft: the cell's inset well shows through; only the dashed golden border marks the gap
+    if (!soft()) g.roundRect(-h, -h, size, size, size * 0.07).fill({ color: 0x000000, alpha: hc ? 1 : 0.35 });
     // dashed golden border
     const segs = 6;
-    const e = h - 3;
+    const e = h - (soft() ? 8 : 3);
     const len = (2 * e) / (segs * 2 - 1);
     for (const [x0, y0, dx, dy] of [
       [-e, -e, 1, 0],
@@ -490,8 +524,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const board = new Graphics();
     const rowsW = L.perRow * L.size + (L.perRow - 1) * L.gap;
     const bh = L.rows * L.size + (L.rows - 1) * L.gap + 28;
-    board.roundRect(safe.x + (safe.w - rowsW) / 2 - 16, L.top - 14, rowsW + 32, bh, 16).fill({ color: S.highContrast ? 0x000000 : 0x2a1a14, alpha: S.highContrast ? 1 : 0.7 });
-    board.roundRect(safe.x + (safe.w - rowsW) / 2 - 16, L.top - 14, rowsW + 32, bh, 16).stroke({ width: S.highContrast ? 2 : 1.5, color: S.highContrast ? 0xffffff : 0x8a5a30, alpha: 0.8 });
+    if (soft()) {
+      const well = softTile({ width: Math.round(rowsW + 32), height: Math.round(bh), base: SB, radius: 18, pressed: true, depth: 8, resolution: dpr });
+      well.position.set(safe.x + safe.w / 2, L.top - 14 + bh / 2);
+      tray.addChild(well);
+    } else {
+      board.roundRect(safe.x + (safe.w - rowsW) / 2 - 16, L.top - 14, rowsW + 32, bh, 16).fill({ color: S.highContrast ? 0x000000 : 0x2a1a14, alpha: S.highContrast ? 1 : 0.7 });
+      board.roundRect(safe.x + (safe.w - rowsW) / 2 - 16, L.top - 14, rowsW + 32, bh, 16).stroke({ width: S.highContrast ? 2 : 1.5, color: S.highContrast ? 0xffffff : 0x8a5a30, alpha: 0.8 });
+    }
     tray.addChild(board);
     p.candidates.forEach((t, i) => {
       const row = Math.floor(i / L.perRow);
@@ -507,7 +547,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       glow.alpha = 0;
       glow.scale.set((L.size * 2) / 128);
       const tile = buildTile(t, L.size, cloth);
-      view.addChild(glow, tile);
+      view.addChild(glow);
+      if (soft()) {
+        // raised candidate: the soft tile's shadows frame the cloth tile drawn on its face
+        const lift = softTile(softOpts(L.size, false));
+        lift.label = 'softTile';
+        view.addChild(lift);
+      }
+      view.addChild(tile);
       // number badge
       const badge = new Container();
       const bgc = new Graphics().circle(0, 0, 10).fill({ color: 0x140a14, alpha: 0.9 }).circle(0, 0, 10).stroke({ width: 1.5, color: S.highContrast ? 0xffffff : GOLD });
@@ -535,6 +582,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
   function markWrong(c: Cand) {
     c.view.alpha = 0.4;
+    // soft: a snapped candidate sinks into the tray (pressed) as well as dimming and getting the ✗
+    const lift = c.view.children.find((ch) => ch.label === 'softTile') as Sprite | undefined;
+    if (lift) {
+      const o = softOpts(c.size, true);
+      lift.texture = softTileTexture(o);
+      lift.width = lift.height = c.size + softTilePad(o) * 2;
+    }
     const x = new Graphics();
     const k = c.size * 0.28;
     x.moveTo(-k, -k).lineTo(k, k).moveTo(k, -k).lineTo(-k, k).stroke({ width: 4, color: S.highContrast ? 0xffffff : 0xfff1d6, cap: 'round' });
@@ -641,12 +695,12 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         threadFx.moveTo(sx, sy).quadraticCurveTo(lerp(sx, slot.x, 0.5), Math.min(sy, slot.y) - 30, lerp(sx, slot.x, t), lerp(sy, slot.y, t)).stroke({ width: 2.5, color: GOLD, alpha: 0.9 });
         c.view.x = lerp(sx, slot.x, easeInOutSine(t));
         c.view.y = lerp(sy, slot.y, easeInOutSine(t));
-        c.view.scale.set(lerp(1, gridGeom.size / c.size, t));
+        c.view.scale.set(lerp(1, gridTileSize() / c.size, t));
       });
       threadFx.clear();
     }
     c.view.visible = false;
-    const tile = buildTile(p.answer, gridGeom.size, cloth);
+    const tile = buildTile(p.answer, gridTileSize(), cloth);
     tile.position.set(slot.x, slot.y);
     gridLayer.addChild(tile);
     slot.visible = false;

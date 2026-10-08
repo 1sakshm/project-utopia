@@ -257,7 +257,7 @@ export default function Settings() {
         <Segmented
           k="uiStyle"
           label="Look"
-          desc="Soft is the new neumorphic style; Aurora is the original dark look"
+          desc="Soft is the dark neumorphic style, in the app and in the games; Aurora is the original glow look. High contrast replaces both."
           options={[
             ['soft', 'Soft'],
             ['aurora', 'Aurora'],

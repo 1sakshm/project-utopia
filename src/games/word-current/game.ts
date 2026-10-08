@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, hex, lerp, tween, TAU } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { PSEUDO_WORDS, REAL_WORDS, mixFor } from './content';
 
 const ROUNDS = 3;
@@ -67,6 +67,21 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   feedback.addChild(fbBg, fbText);
   feedback.alpha = 0;
 
+  // Soft (dark neumorphism) look: a calm dock across the bottom that the two sorting pads are extruded from.
+  const soft = () => S.soft;
+  const SB = '#0d1530';
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  const dock = new Graphics();
+  const zoneLTile = new Sprite();
+  const zoneRTile = new Sprite();
+  zoneLTile.anchor.set(0.5);
+  zoneRTile.anchor.set(0.5);
+
   // zone pills
   const zoneL = new Container();
   const zoneR = new Container();
@@ -76,9 +91,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const zoneRText = new Text({ text: 'NOT A WORD', style: {}, resolution: dpr });
   const zoneLKey = new Text({ text: '←', style: {}, resolution: dpr });
   const zoneRKey = new Text({ text: '→', style: {}, resolution: dpr });
-  zoneL.addChild(zoneLBg, zoneLText, zoneLKey);
-  zoneR.addChild(zoneRBg, zoneRText, zoneRKey);
-  zones.addChild(zoneL, zoneR);
+  zoneL.addChild(zoneLTile, zoneLBg, zoneLText, zoneLKey);
+  zoneR.addChild(zoneRTile, zoneRBg, zoneRText, zoneRKey);
+  zones.addChild(dock, zoneL, zoneR);
   let zoneFlashL = 0;
   let zoneFlashR = 0;
 
@@ -251,10 +266,28 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const y = safe.y + safe.h - zh - 14;
     zoneL.position.set(safe.x + 12, y);
     zoneR.position.set(safe.x + safe.w / 2 + 6, y);
+    const sf = soft();
+    dock.clear();
+    zoneLTile.visible = zoneRTile.visible = sf;
+    if (sf) {
+      // the dock: a flat band over the river mouth, with a faint lit lip, so the pads have a uniform surface
+      const dy = y - 16;
+      dock.rect(0, dy, W, H - dy).fill({ color: hex(SB) });
+      dock.moveTo(0, dy).lineTo(W, dy).stroke({ width: 1.5, color: 0xffffff, alpha: 0.07 });
+      dock.rect(0, dy - 10, W, 10).fill({ color: hex(SB), alpha: 0.5 });
+    }
     const drawPill = (g: Graphics, color: number, flash: number, icon: 'check' | 'x') => {
       g.clear();
-      g.roundRect(0, 0, zw, zh, zh / 2).fill({ color: hc ? 0x000000 : 0x0a0f20, alpha: hc ? 1 : 0.72 + flash * 0.2 });
-      g.roundRect(0, 0, zw, zh, zh / 2).stroke({ width: hc ? 3 : 2 + flash * 2, color: hc ? 0xffffff : color, alpha: hc ? 1 : 0.7 + flash * 0.3 });
+      if (sf) {
+        // pad sinks in and lights its side's color for a moment after a sort
+        const tile = g === zoneLBg ? zoneLTile : zoneRTile;
+        const lit = flash > 0.25;
+        setSoft(tile, { width: Math.round(zw), height: zh, base: SB, radius: zh / 2, pressed: lit, rim: lit ? '#' + color.toString(16).padStart(6, '0') : undefined, rimWidth: 3, depth: 7, resolution: dpr });
+        tile.position.set(zw / 2, zh / 2);
+      } else {
+        g.roundRect(0, 0, zw, zh, zh / 2).fill({ color: hc ? 0x000000 : 0x0a0f20, alpha: hc ? 1 : 0.72 + flash * 0.2 });
+        g.roundRect(0, 0, zw, zh, zh / 2).stroke({ width: hc ? 3 : 2 + flash * 2, color: hc ? 0xffffff : color, alpha: hc ? 1 : 0.7 + flash * 0.3 });
+      }
       const cx = zh / 2 + 4;
       const cy = zh / 2;
       g.circle(cx, cy, zh * 0.3).fill({ color: hc ? 0xffffff : color, alpha: 1 });

@@ -5,6 +5,8 @@ import type { GameContext, GameInstance } from '@/sdk';
 import { tween, clamp, easeOutCubic, easeInOutSine } from '@/sdk';
 import { mountR3F, useGame, GameEffects, Motes, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
 import { makePuzzle, trace, allLit, starsFor, cwCost, type Puzzle, type Trace, type Segment } from './logic';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { puckGeometry } from './soft';
 
 const SESSION = 5;
 const BEAM_Y = 0.42;
@@ -420,14 +422,15 @@ function Scene({ view, onTap, burstRef }: { view: View; onTap: (i: number) => vo
   const ctx = useGame();
   useSyncExternalStore(view.subscribe, view.getVersion);
   const hc = ctx.settings.highContrast;
+  const soft = ctx.settings.soft;
   const p = view.puzzle;
   return (
     <>
       <CameraRig view={view} />
       <ScreenGradient top={hc ? '#000000' : '#3b3478'} mid={hc ? '#050505' : '#c98bb0'} bottom={hc ? '#0a0a0a' : '#ffc4a0'} />
       <ambientLight intensity={0.45} color="#ffe6f0" />
-      <hemisphereLight args={['#ffe2c8', '#6b4f8a', 0.7]} />
-      <directionalLight position={[-6, 12, 4]} intensity={1.35} color="#ffe0c0" />
+      <hemisphereLight args={['#ffe2c8', '#6b4f8a', soft ? 0.95 : 0.7]} />
+      <directionalLight position={[-6, 12, 4]} intensity={soft ? 1.1 : 1.35} color="#ffe0c0" />
       <directionalLight position={[8, 5, -6]} intensity={0.35} color="#9fb8ff" />
       <SunDisc />
       <Clouds />
@@ -577,7 +580,9 @@ function Chamber({ view, onTap }: { view: View; onTap: (i: number) => void }) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const o = useMemo(() => new THREE.Object3D(), []);
-  const tileGeo = useMemo(() => new THREE.BoxGeometry(0.94, 0.3, 0.94), []);
+  const soft = ctx.settings.soft;
+  // Soft look: pillowy clay tiles with rounded edges and a slightly wider seam.
+  const tileGeo = useMemo(() => (soft ? new RoundedBoxGeometry(0.9, 0.3, 0.9, 3, 0.08) : new THREE.BoxGeometry(0.94, 0.3, 0.94)), [soft]);
   const colors = useMemo(() => {
     const a = new THREE.Color(hc ? '#3a3a3a' : '#f7dcc6');
     const b = new THREE.Color(hc ? '#2a2a2a' : '#eec6b4');
@@ -632,10 +637,10 @@ function Chamber({ view, onTap }: { view: View; onTap: (i: number) => void }) {
   return (
     <group ref={root}>
       <instancedMesh ref={setTiles} args={[tileGeo, undefined, n * n]} frustumCulled={false}>
-        <meshStandardMaterial map={hc ? null : tex} roughness={0.85} />
+        {soft ? <meshStandardMaterial roughness={0.95} /> : <meshStandardMaterial map={hc ? null : tex} roughness={0.85} />}
       </instancedMesh>
       <group ref={body}>
-        <TempleBody n={n} hc={hc} />
+        <TempleBody n={n} hc={hc} soft={soft} />
       </group>
       {/* elements */}
       {ch.cells.map((c, i) => {
@@ -654,7 +659,7 @@ function Chamber({ view, onTap }: { view: View; onTap: (i: number) => void }) {
   );
 }
 
-function TempleBody({ n, hc }: { n: number; hc: boolean }) {
+function TempleBody({ n, hc, soft }: { n: number; hc: boolean; soft: boolean }) {
   const mat = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -671,6 +676,7 @@ function TempleBody({ n, hc }: { n: number; hc: boolean }) {
   );
   const W = n + 0.5;
   const water = n + 0.2;
+  const rimGeo = useMemo(() => (soft ? { h: new RoundedBoxGeometry(W + 0.3, 0.42, 0.3, 3, 0.1), v: new RoundedBoxGeometry(0.3, 0.42, W + 0.3, 3, 0.1) } : null), [W, soft]);
   return (
     <>
       {/* water channel glowing between the tiles */}
@@ -684,8 +690,12 @@ function TempleBody({ n, hc }: { n: number; hc: boolean }) {
         const s = k % 2 ? 1 : -1;
         return (
           <mesh key={k} position={horiz ? [0, -0.2, s * (W / 2)] : [s * (W / 2), -0.2, 0]}>
-            <boxGeometry args={horiz ? [W + 0.3, 0.42, 0.3] : [0.3, 0.42, W + 0.3]} />
-            <meshStandardMaterial color={hc ? '#777777' : '#f3cdb8'} roughness={0.9} />
+            {soft ? (
+              <primitive object={horiz ? rimGeo!.h : rimGeo!.v} attach="geometry" />
+            ) : (
+              <boxGeometry args={horiz ? [W + 0.3, 0.42, 0.3] : [0.3, 0.42, W + 0.3]} />
+            )}
+            <meshStandardMaterial color={hc ? '#777777' : '#f3cdb8'} roughness={soft ? 0.95 : 0.9} />
           </mesh>
         );
       })}
@@ -723,6 +733,21 @@ function TempleBody({ n, hc }: { n: number; hc: boolean }) {
   );
 }
 
+/** Soft look: shared rounded clay geometries (built lazily, only when soft is on). */
+let softGeos: null | { cap: THREE.BufferGeometry; pillar: THREE.BufferGeometry; lintel: THREE.BufferGeometry; prismBase: THREE.BufferGeometry; crystalBase: THREE.BufferGeometry; mirrorBase: THREE.BufferGeometry } = null;
+function getSoftGeos() {
+  if (!softGeos)
+    softGeos = {
+      cap: new RoundedBoxGeometry(0.78, 0.14, 0.78, 3, 0.05),
+      pillar: new RoundedBoxGeometry(0.5, 1.0, 0.18, 3, 0.06),
+      lintel: new RoundedBoxGeometry(0.56, 0.16, 0.92, 3, 0.06),
+      prismBase: puckGeometry(0.36, 0.2, 0.07, 32).translate(0, -0.1, 0),
+      crystalBase: puckGeometry(0.34, 0.12, 0.05, 32).translate(0, -0.06, 0),
+      mirrorBase: puckGeometry(0.46, 0.09, 0.04, 36).translate(0, -0.045, 0),
+    };
+  return softGeos;
+}
+
 function useUnfold(view: View, x: number, z: number, ref: React.RefObject<THREE.Group | null>) {
   const ctx = useGame();
   useFrame(() => {
@@ -737,6 +762,7 @@ function useUnfold(view: View, x: number, z: number, ref: React.RefObject<THREE.
 
 function Block({ pos, view, x, z, hc }: { pos: [number, number, number]; view: View; x: number; z: number; hc: boolean }) {
   const ref = useRef<THREE.Group>(null);
+  const soft = useGame().settings.soft;
   useUnfold(view, x, z, ref);
   return (
     <group position={pos}>
@@ -745,8 +771,8 @@ function Block({ pos, view, x, z, hc }: { pos: [number, number, number]; view: V
           <cylinderGeometry args={[0.3, 0.34, 0.9, 16]} />
           <meshStandardMaterial color={hc ? '#888888' : '#e7b6a6'} roughness={0.85} />
         </mesh>
-        <mesh position={[0, 0.95, 0]}>
-          <boxGeometry args={[0.78, 0.12, 0.78]} />
+        <mesh position={[0, 0.95, 0]} {...(soft ? { geometry: getSoftGeos().cap } : {})}>
+          {!soft && <boxGeometry args={[0.78, 0.12, 0.78]} />}
           <meshStandardMaterial color={hc ? '#aaaaaa' : '#f6d2bf'} roughness={0.85} />
         </mesh>
         <mesh position={[0, 1.12, 0]}>
@@ -762,6 +788,7 @@ function Source({ pos, dir, view, x, z, hc }: { pos: [number, number, number]; d
   const ref = useRef<THREE.Group>(null);
   const orb = useRef<THREE.Sprite>(null);
   const ctx = useGame();
+  const soft = ctx.settings.soft;
   useUnfold(view, x, z, ref);
   useFrame((s) => {
     if (!orb.current) return;
@@ -775,13 +802,13 @@ function Source({ pos, dir, view, x, z, hc }: { pos: [number, number, number]; d
       <group ref={ref}>
         <group rotation-y={rotY}>
           {[-1, 1].map((s) => (
-            <mesh key={s} position={[0, 0.5, s * 0.36]}>
-              <boxGeometry args={[0.5, 1.0, 0.18]} />
+            <mesh key={s} position={[0, 0.5, s * 0.36]} {...(soft ? { geometry: getSoftGeos().pillar } : {})}>
+              {!soft && <boxGeometry args={[0.5, 1.0, 0.18]} />}
               <meshStandardMaterial color={hc ? '#bbbbbb' : '#f6d2bf'} roughness={0.85} />
             </mesh>
           ))}
-          <mesh position={[0, 1.05, 0]}>
-            <boxGeometry args={[0.56, 0.16, 0.92]} />
+          <mesh position={[0, 1.05, 0]} {...(soft ? { geometry: getSoftGeos().lintel } : {})}>
+            {!soft && <boxGeometry args={[0.56, 0.16, 0.92]} />}
             <meshStandardMaterial color={hc ? '#bbbbbb' : '#e7a79a'} roughness={0.85} />
           </mesh>
         </group>
@@ -808,8 +835,8 @@ function Prism({ pos, view, x, z, hc }: { pos: [number, number, number]; view: V
   return (
     <group position={pos}>
       <group ref={ref}>
-        <mesh position={[0, 0.1, 0]}>
-          <cylinderGeometry args={[0.32, 0.36, 0.2, 6]} />
+        <mesh position={[0, 0.1, 0]} {...(ctx.settings.soft ? { geometry: getSoftGeos().prismBase } : {})}>
+          {!ctx.settings.soft && <cylinderGeometry args={[0.32, 0.36, 0.2, 6]} />}
           <meshStandardMaterial color={hc ? '#999999' : '#f3cdb8'} roughness={0.8} />
         </mesh>
         <mesh ref={gem} position={[0, BEAM_Y + 0.05, 0]} scale={[0.28, 0.36, 0.28]}>
@@ -868,8 +895,8 @@ function Crystal({ pos, id, view, x, z, hc }: { pos: [number, number, number]; i
   return (
     <group position={pos}>
       <group ref={ref}>
-        <mesh position={[0, 0.06, 0]}>
-          <cylinderGeometry args={[0.3, 0.34, 0.12, 8]} />
+        <mesh position={[0, 0.06, 0]} {...(ctx.settings.soft ? { geometry: getSoftGeos().crystalBase } : {})}>
+          {!ctx.settings.soft && <cylinderGeometry args={[0.3, 0.34, 0.12, 8]} />}
           <meshStandardMaterial color={hc ? '#999999' : '#e5b7a8'} roughness={0.8} />
         </mesh>
         <mesh ref={ring} position={[0, 0.14, 0]} rotation-x={-Math.PI / 2}>
@@ -924,8 +951,8 @@ function Mirror({ pos, id, view, x, z, hc, onTap }: { pos: [number, number, numb
           <ringGeometry args={[0.5, 0.6, 4, 1, Math.PI / 4]} />
           <meshBasicMaterial color={hc ? '#ffff55' : '#fff4c8'} transparent opacity={0.8} depthWrite={false} />
         </mesh>
-        <mesh position={[0, 0.04, 0]}>
-          <cylinderGeometry args={[0.44, 0.46, 0.08, 24]} />
+        <mesh position={[0, 0.04, 0]} {...(ctx.settings.soft ? { geometry: getSoftGeos().mirrorBase } : {})}>
+          {!ctx.settings.soft && <cylinderGeometry args={[0.44, 0.46, 0.08, 24]} />}
           <meshStandardMaterial color={hc ? '#bbbbbb' : '#f9e4d4'} roughness={0.6} />
         </mesh>
         <group ref={spin}>

@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { normalizeText, similarity, words } from '@/sdk/speech';
 import { createAnswerBar, createLangToggle } from '@/sdk/voiceui';
 import { CATEGORIES, FILLER, type Category } from './content';
@@ -138,11 +138,27 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const note = ctx.audio.scale(65, 'majorPenta');
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): word stars and the bubble are extruded from one calm surface; the orb sits in an inset well.
+  const surf = mixHex(pal.bg, pal.bg2, 0.45);
+  const auroraBg = gradientTexture([
     [0, '#04050f'],
     [0.5, '#171036'],
     [1, '#080a1c'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.28, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  const well = new Sprite();
+  well.anchor.set(0.5);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: ctx.quality.maxDpr });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const skyGlow = new Sprite(glowTexture(256, 0.2));
   skyGlow.anchor.set(0.5);
   skyGlow.tint = hex(pal.accent2);
@@ -165,7 +181,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const core = new Graphics();
   const count = new Text({ text: '0', style: { fontFamily: FONT, fontSize: 40, fontWeight: '900', fill: '#1b1206', align: 'center' } });
   count.anchor.set(0.5);
-  orbLayer.addChild(halo, ring, core, count);
+  orbLayer.addChild(well, halo, ring, core, count);
 
   const kicker = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.6)', letterSpacing: 2, align: 'center' } });
   kicker.anchor.set(0.5);
@@ -175,11 +191,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   status.anchor.set(0.5);
   const bubble = new Container();
   const bubbleBg = new Graphics();
+  const bubbleFace = new Sprite();
+  bubbleFace.anchor.set(0.5);
   const bubbleText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 20, fontWeight: '800', fill: '#ffffff', align: 'center' } });
   bubbleText.anchor.set(0.5);
   const bubbleLabel = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: '800', fill: 'rgba(255,255,255,0.6)', letterSpacing: 2 } });
   bubbleLabel.anchor.set(0.5);
-  bubble.addChild(bubbleBg, bubbleLabel, bubbleText);
+  bubble.addChild(bubbleFace, bubbleBg, bubbleLabel, bubbleText);
   bubble.visible = false;
   ui.addChild(kicker, title, status, bubble);
 
@@ -214,8 +232,12 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    const soft = ctx.settings.soft;
+    bg.texture = soft ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
+    skyGlow.alpha = soft ? 0.07 : 0.12;
+    moteSprites.forEach((m, i) => (m.visible = !soft || i % 2 === 0));
     cx = safe.x + safe.w / 2;
     skyGlow.position.set(cx, safe.y + safe.h * 0.45);
     skyGlow.scale.set(Math.max(W, H) / 180);
@@ -231,6 +253,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ring.position.set(orbX, orbY);
     core.position.set(orbX, orbY);
     count.position.set(orbX, orbY);
+    well.position.set(orbX, orbY);
+    well.visible = soft;
+    if (soft) {
+      // the timer ring runs inside this groove
+      const d = Math.round((orbR + 12) * 2 + 26);
+      setSoft(well, { width: d, height: d, radius: d / 2, base: surf, pressed: true, depth: 6 });
+    }
     count.style.fontSize = Math.round(orbR * 0.85);
     status.position.set(cx, orbY + orbR + 30);
     areaTop = title.y + 34;
@@ -253,6 +282,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const bh = 64;
     const hc = ctx.settings.highContrast;
     bubbleBg.clear();
+    bubbleFace.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // width snapped to 16px steps so the cached textures stay few
+      setSoft(bubbleFace, { width: Math.min(Math.floor(safe.w - 36), Math.ceil(bw / 16) * 16), height: bh, radius: 22, base: surf, depth: 7 });
+      bubbleLabel.position.set(0, -bh / 2 + 13);
+      bubbleText.position.set(0, 8);
+      return;
+    }
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).fill({ color: hc ? 0x000000 : 0x18143a, alpha: 0.84 });
     bubbleBg.roundRect(-bw / 2, -bh / 2, bw, bh, 22).stroke({ width: hc ? 3 : 1.5, color: 0xffffff, alpha: hc ? 1 : 0.3 });
     bubbleLabel.position.set(0, -bh / 2 + 13);
@@ -302,16 +339,25 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const size = Math.round((stars.length > 16 ? 15 : 17) * Math.min(1.25, ctx.settings.textScale));
     const label = new Text({ text, style: { fontFamily: FONT, fontSize: size, fontWeight: '800', fill: '#ffffff' } });
     label.anchor.set(0.5);
-    const w = label.width + 26;
+    const soft = ctx.settings.soft;
+    const w = soft ? Math.ceil((label.width + 26) / 8) * 8 : label.width + 26;
     const h = size + 16;
     const hc = ctx.settings.highContrast;
-    pill.roundRect(-w / 2, -h / 2, w, h, h / 2).fill({ color: hc ? 0x000000 : 0x241a48, alpha: 0.88 });
-    pill.roundRect(-w / 2, -h / 2, w, h, h / 2).stroke({ width: hc ? 2.5 : 1.5, color: hex(pal.accent), alpha: hc ? 1 : 0.75 });
+    const face = new Sprite();
+    face.visible = soft;
+    if (soft) {
+      // raised pill with a thin accent rim and the star dot
+      face.anchor.set(0.5);
+      setSoft(face, { width: w, height: h, radius: h / 2, base: surf, rim: mixHex(surf, pal.accent, 0.6), rimWidth: 1.5, depth: 4 });
+    } else {
+      pill.roundRect(-w / 2, -h / 2, w, h, h / 2).fill({ color: hc ? 0x000000 : 0x241a48, alpha: 0.88 });
+      pill.roundRect(-w / 2, -h / 2, w, h, h / 2).stroke({ width: hc ? 2.5 : 1.5, color: hex(pal.accent), alpha: hc ? 1 : 0.75 });
+    }
     pill.circle(-w / 2 + 9, 0, 3).fill({ color: hex(pal.accent) });
     label.x = 4;
     glow.scale.set((w / 64) * 1.3, (h / 64) * 2.2);
     glow.alpha = 0.35;
-    c.addChild(glow, pill, label);
+    c.addChild(glow, face, pill, label);
     const p = place(w, h);
     let parent = -1;
     let pd = Math.hypot(p.x - orbX, p.y - orbY);
@@ -607,7 +653,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const now = ctx.time();
     for (const s of stars) {
       const age = (now - s.born) / 1000;
-      s.glow.alpha = 0.25 + Math.max(0, 0.6 - age) + (reduced ? 0 : Math.sin(t * 2 + s.x) * 0.06);
+      s.glow.alpha = (0.25 + Math.max(0, 0.6 - age) + (reduced ? 0 : Math.sin(t * 2 + s.x) * 0.06)) * (ctx.settings.soft ? 0.45 : 1);
     }
     for (let i = floaters.length - 1; i >= 0; i--) {
       const f = floaters[i];

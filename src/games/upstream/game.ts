@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, TilingSprite, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, tween } from '@/sdk';
-import { createPixiApp, glowTexture } from '@/sdk/pixi';
+import { createPixiApp, glowTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { ANGLE, DIR_WORD, VEC, levelParams, makeTrial, type Dir, type Trial } from './logic';
 import { brushStroke, drawEnso, makeKoi, makeLilyPad, paperTexture, type Koi } from './art';
 
@@ -186,6 +186,27 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const feedback = new Text({ text: '', style: { fontFamily: FONT, fontSize: 18, fontWeight: '800', fill: INK, align: 'center' } });
   feedback.anchor.set(0.5);
   feedback.alpha = 0;
+  // Soft look: the ink-wash paper is the game's identity, so it stays light; only the tap-zone chevrons sit on small
+  // raised paper buttons (light-on-paper neumorphism) so they read as the controls they are.
+  const soft = () => ctx.settings.soft;
+  const PAPER = '#ebe1cb';
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  const chevTiles = [0, 1, 2, 3].map(() => {
+    const t = new Sprite();
+    t.anchor.set(0.5);
+    t.alpha = 0.9;
+    return t;
+  });
+  // below the school so the buttons never cover a fish (the flanker display must stay fully visible)
+  const chevTileLayer = new Container();
+  chevTileLayer.addChild(...chevTiles);
+  app.stage.addChildAt(chevTileLayer, app.stage.getChildIndex(school));
   ui.addChild(chevrons, hint, banner, feedback);
 
   // ---------------------------------------------------------------- layout
@@ -259,13 +280,27 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       const ny = dx;
       chevrons.moveTo(x - dx * s + nx * s, y - dy * s + ny * s).lineTo(x, y).lineTo(x - dx * s - nx * s, y - dy * s - ny * s);
     };
-    chev(safe.x + 22, cy, -1, 0);
-    chev(safe.x + safe.w - 22, cy, 1, 0);
-    if (fourDirShown) {
-      chev(cx, Math.max(safe.y, 0) + 92, 0, -1);
-      chev(cx, safe.y + safe.h - 70, 0, 1);
-    }
-    chevrons.stroke({ width: 3 * unit, color: col, alpha: a, cap: 'round', join: 'round' });
+    const sf = soft();
+    const inset = sf ? 36 * unit : 22;
+    const spots: Array<[number, number, number, number]> = [
+      [safe.x + inset, cy, -1, 0],
+      [safe.x + safe.w - inset, cy, 1, 0],
+      [cx, Math.max(safe.y, 0) + 92, 0, -1],
+      [cx, safe.y + safe.h - 70, 0, 1],
+    ];
+    spots.forEach(([x, y, dx, dy], i) => {
+      const show = i < 2 || fourDirShown;
+      const t = chevTiles[i];
+      t.visible = sf && show;
+      if (t.visible) {
+        const d = Math.round(50 * unit);
+        setSoft(t, { width: d, height: d, base: PAPER, radius: d / 2, depth: 4, resolution: sres });
+        // the chevron tip points outward; centre the button on the chevron's body
+        t.position.set(x - dx * s * 0.5, y - dy * s * 0.5);
+      }
+      if (show) chev(x + (sf ? dx * s * 0.15 : 0), y + (sf ? dy * s * 0.15 : 0), dx, dy);
+    });
+    chevrons.stroke({ width: (sf ? 2.6 : 3) * unit, color: col, alpha: sf ? 0.5 : a, cap: 'round', join: 'round' });
   }
 
   // ---------------------------------------------------------------- state

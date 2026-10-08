@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
-import { clamp, easeOutBack, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, easeOutBack, hex, mixHex, tween } from '@/sdk';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
 import { UI, WORDS } from './content';
 
@@ -14,6 +14,7 @@ type Mode = 'cued' | 'uncued' | 'both';
 
 interface Ear {
   c: Container;
+  well: Sprite;
   halo: Sprite;
   orb: Graphics;
   icon: Text;
@@ -32,6 +33,7 @@ interface Ear {
 interface Card {
   c: Container;
   bg: Graphics;
+  face: Sprite;
   label: Text;
   key: Text;
   mark: Text;
@@ -52,11 +54,25 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const earColor = [hex(pal.accent), hex(pal.accent2)];
 
   // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (neumorphism): answer cards are extruded from one calm surface; each ear orb sits in an inset well.
+  const surf = mixHex(pal.bg, pal.bg2, 0.5);
+  const auroraBg = gradientTexture([
     [0, '#060816'],
     [0.5, '#141a3c'],
     [1, '#0b0f24'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, mixHex(surf, '#000000', 0.35)],
+    [0.2, surf],
+    [1, surf],
+  ]);
+  const bg = new Sprite(ctx.settings.soft ? softBg : auroraBg);
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    const pad = softTilePad(o);
+    sp.texture = softTileTexture({ ...o, resolution: ctx.quality.maxDpr });
+    sp.width = o.width + pad * 2;
+    sp.height = o.height + pad * 2;
+  }
   const motes = new Container();
   const center = new Graphics();
   const earLayer = new Container();
@@ -97,6 +113,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
   function makeEar(side: Side): Ear {
     const c = new Container();
+    const well = new Sprite();
+    well.anchor.set(0.5);
     const halo = new Sprite(glowTexture(256, 0.22));
     halo.anchor.set(0.5);
     halo.tint = earColor[side];
@@ -115,9 +133,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     bubbleText.anchor.set(0.5);
     bubble.addChild(bubbleBg, bubbleText);
     bubble.alpha = 0;
-    c.addChild(halo, rings, orb, icon, sideT, voice, bubble);
+    c.addChild(well, halo, rings, orb, icon, sideT, voice, bubble);
     earLayer.addChild(c);
-    return { c, halo, orb, icon, side: sideT, voice, bubble, bubbleBg, bubbleText, pulse: 0, ripples: [], rings, focus: 0.6, focusTarget: 0.6 };
+    return { c, well, halo, orb, icon, side: sideT, voice, bubble, bubbleBg, bubbleText, pulse: 0, ripples: [], rings, focus: 0.6, focusTarget: 0.6 };
   }
   const ears: [Ear, Ear] = [makeEar(0), makeEar(1)];
 
@@ -133,8 +151,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = ctx.settings.soft ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
+    moteSprites.forEach((m, i) => (m.visible = !ctx.settings.soft || i % 2 === 0));
     orbR = Math.min(safe.w * 0.13, 56);
     earY = safe.y + safe.h * 0.28;
     const cx = safe.x + safe.w / 2;
@@ -164,6 +184,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const hc = ctx.settings.highContrast;
     ears.forEach((e, i) => {
       e.orb.clear();
+      e.well.visible = ctx.settings.soft;
+      if (ctx.settings.soft) {
+        const d = Math.round(orbR * 2 + 24);
+        setSoft(e.well, { width: d, height: d, radius: d / 2, base: surf, pressed: true, depth: 6 });
+      }
       e.orb.circle(0, 0, orbR).fill({ color: hc ? 0x000000 : earColor[i], alpha: hc ? 1 : 0.28 });
       e.orb.circle(0, 0, orbR).stroke({ width: hc ? 4 : 2.5, color: hc ? 0xffffff : earColor[i], alpha: 0.95 });
       e.orb.circle(-orbR * 0.35, -orbR * 0.4, orbR * 0.22).fill({ color: 0xffffff, alpha: hc ? 0 : 0.25 });
@@ -190,23 +215,35 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function makeCard(word: string, i: number): Card {
     const c = new Container();
     const bgG = new Graphics();
+    const face = new Sprite();
+    face.anchor.set(0.5);
     const label = new Text({ text: word, style: { fontFamily: FONT, fontSize: 24, fontWeight: '800', fill: '#ffffff', align: 'center' } });
     label.anchor.set(0.5);
     const key = new Text({ text: String(i + 1), style: { fontFamily: FONT, fontSize: 13, fontWeight: '800', fill: 'rgba(255,255,255,0.55)' } });
     const mark = new Text({ text: '', style: { fontFamily: FONT, fontSize: 18, fontWeight: '900', fill: '#0b0d14' } });
     mark.anchor.set(0.5);
-    c.addChild(bgG, label, key, mark);
+    c.addChild(face, bgG, label, key, mark);
     c.eventMode = preview ? 'none' : 'static';
     c.cursor = 'pointer';
     c.on('pointertap', () => choose(i));
     cardLayer.addChild(c);
-    return { c, bg: bgG, label, key, mark, word, selected: false, w: 0, h: 0 };
+    return { c, bg: bgG, face, label, key, mark, word, selected: false, w: 0, h: 0 };
   }
 
   function drawCard(cd: Card, state: 'idle' | 'sel' | 'right' | 'wrong' | 'reveal', tag = '') {
     const hc = ctx.settings.highContrast;
     const { w, h } = cd;
     cd.bg.clear();
+    cd.face.visible = ctx.settings.soft;
+    if (ctx.settings.soft) {
+      // Raised card; a picked card sinks in. Rim + mark keep the meaning (highlight = picked / right, pink = wrong).
+      const rim = state === 'wrong' ? '#ff9fb8' : state === 'idle' ? undefined : pal.highlight;
+      setSoft(cd.face, { width: Math.round(w), height: Math.round(h), radius: 22, base: surf, pressed: state === 'sel' || state === 'wrong' || state === 'right', rim, rimWidth: state === 'sel' ? 2.5 : 3, depth: 7 });
+      cd.label.style.fill = state === 'right' ? pal.highlight : state === 'wrong' ? '#ffc2d2' : '#ffffff';
+      cd.mark.text = state === 'right' || state === 'reveal' ? `✓ ${tag}`.trim() : state === 'wrong' ? '✗' : state === 'sel' ? '●' : '';
+      cd.mark.style.fill = state === 'wrong' ? '#ffb8c8' : pal.highlight;
+      return;
+    }
     const fill = state === 'right' ? hex(pal.highlight) : state === 'sel' ? 0x2c3a78 : state === 'wrong' ? 0x4a2638 : hc ? 0x000000 : 0x1a2050;
     cd.bg.roundRect(-w / 2, -h / 2, w, h, 22).fill({ color: fill, alpha: state === 'idle' ? 0.82 : 0.96 });
     cd.bg.roundRect(-w / 2, -h / 2, w, h, 22).stroke({

@@ -98,6 +98,11 @@ export interface GameSettings {
   readingFont: 'default' | 'atkinson';
   textScale: number;
   leftHanded: boolean;
+  /**
+   * The player chose the Soft (dark neumorphism) look. Draw tiles, cards and buttons as soft extruded surfaces
+   * (see `softTile` in '@/sdk/pixi'). Always false when highContrast is on.
+   */
+  soft: boolean;
 }
 
 export interface QualityProfile {

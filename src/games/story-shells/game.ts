@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
 import { clamp, easeOutBack, easeOutCubic, hex, tween } from '@/sdk';
-import { createPixiApp, createParticles, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
 import { STORIES, UI, type Story } from './content';
 
@@ -12,6 +12,8 @@ const STORY_COUNT = 6;
 interface Card {
   c: Container;
   bg: Graphics;
+  tile: Sprite;
+  well: Sprite;
   icon: Text;
   label: Text;
   key: Text;
@@ -38,13 +40,30 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   const stair = ctx.staircase({ min: 1, max: 3, up: 1, down: 1, start: clamp(ctx.startLevel, 1, 2) });
   const note = ctx.audio.scale(62, 'majorPenta');
 
-  // ---- scene
-  const bg = new Sprite(gradientTexture([
+  // Soft (dark neumorphism) look: calm deep-water gradient settling into one flat tone the cards are extruded from.
+  const soft = () => ctx.settings.soft;
+  const SB = '#0f2636';
+  const sres = ctx.quality.maxDpr;
+  const auroraBg = gradientTexture([
     [0, '#040c18'],
     [0.45, '#0b2436'],
     [0.75, '#123a4a'],
     [1, '#1b2f38'],
-  ]));
+  ]);
+  const softBg = gradientTexture([
+    [0, '#06111e'],
+    [0.5, SB],
+    [1, SB],
+  ]);
+  function setSoft(s: Sprite, o: SoftTileOptions) {
+    s.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    s.width = o.width + p * 2;
+    s.height = o.height + p * 2;
+  }
+
+  // ---- scene
+  const bg = new Sprite(auroraBg);
   const rays = new Graphics();
   const motes = new Container();
   const sand = new Graphics();
@@ -114,6 +133,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     W = l.width;
     H = l.height;
     safe = l.safe;
+    bg.texture = soft() ? softBg : auroraBg;
     bg.width = W;
     bg.height = H;
     R = Math.min(safe.w * 0.2, 88);
@@ -189,6 +209,15 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const pts: number[] = [0, H, 0, sandY];
     for (let x = 0; x <= W; x += 16) pts.push(x, sandY + Math.sin(x / 70) * 8 + Math.sin(x / 23) * 3);
     pts.push(W, sandY, W, H);
+    if (soft()) {
+      // soft: no layered sand fills (the cards sit on a flat surface), just a faint grain of sparkles
+      for (let i = 0; i < 40; i++) {
+        const x = (((i * 7919) % 1000) / 1000) * W;
+        const y = sandY + 14 + (((i * 3571) % 1000) / 1000) * (H - sandY - 14);
+        sand.circle(x, y, 0.8 + (i % 3) * 0.5).fill({ color: i % 4 ? 0xfff1c9 : 0x8ff0e0, alpha: 0.08 + (i % 5) * 0.03 });
+      }
+      return;
+    }
     sand.poly(pts).fill({ color: hc ? 0x000000 : 0x6a5a4a, alpha: hc ? 1 : 0.28 });
     const pts2: number[] = [0, H, 0, sandY + 40];
     for (let x = 0; x <= W; x += 16) pts2.push(x, sandY + 40 + Math.sin(x / 55 + 1) * 6);
@@ -234,6 +263,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function makeCard(icon: string, text: string, i: number, correct: boolean): Card {
     const c = new Container();
     const bgG = new Graphics();
+    const tile = new Sprite();
+    tile.anchor.set(0.5);
+    const well = new Sprite();
+    well.anchor.set(0.5);
     const iconT = new Text({ text: icon, style: { fontFamily: EMOJI_FONT, fontSize: 30 } });
     iconT.anchor.set(0.5);
     const label = new Text({ text, style: { fontFamily: FONT, fontSize: 21, fontWeight: '800', fill: '#ffffff', wordWrap: true, wordWrapWidth: 200 } });
@@ -242,18 +275,31 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     key.anchor.set(1, 0);
     const mark = new Text({ text: '', style: { fontFamily: FONT, fontSize: 26, fontWeight: '900', fill: '#0b0d14' } });
     mark.anchor.set(0.5);
-    c.addChild(bgG, iconT, label, key, mark);
+    c.addChild(tile, well, bgG, iconT, label, key, mark);
     c.eventMode = preview ? 'none' : 'static';
     c.cursor = 'pointer';
     c.on('pointertap', () => choose(i));
     cardLayer.addChild(c);
-    return { c, bg: bgG, icon: iconT, label, key, mark, correct, w: 0, h: 0, baseY: 0 };
+    return { c, bg: bgG, tile, well, icon: iconT, label, key, mark, correct, w: 0, h: 0, baseY: 0 };
   }
 
   function drawCard(cd: Card, state: 'idle' | 'right' | 'wrong' | 'reveal') {
     const hc = ctx.settings.highContrast;
     const { w, h } = cd;
     cd.bg.clear();
+    cd.tile.visible = cd.well.visible = soft();
+    if (soft()) {
+      // picked card sinks in; the rim + ✓/✗ mark carry right / wrong, the icon sits in an inset well
+      const rim = state === 'wrong' ? '#ff9fb8' : state === 'idle' ? undefined : pal.accent;
+      setSoft(cd.tile, { width: w, height: h, base: SB, radius: 22, pressed: state === 'right' || state === 'wrong', rim, rimWidth: state === 'reveal' ? 4 : 3, depth: 7, resolution: sres });
+      const d = Math.round(h * 0.72);
+      setSoft(cd.well, { width: d, height: d, base: SB, radius: d / 2, pressed: true, depth: 4, resolution: sres });
+      cd.well.position.set(-w / 2 + h / 2, 0);
+      cd.label.style.fill = '#ffffff';
+      cd.mark.text = state === 'right' || state === 'reveal' ? '✓' : state === 'wrong' ? '✗' : '';
+      cd.mark.style.fill = state === 'wrong' ? '#ffb8c8' : pal.accent;
+      return;
+    }
     const fill = state === 'right' ? hex(pal.accent) : state === 'wrong' ? 0x4a2638 : hc ? 0x000000 : 0x123047;
     cd.bg.roundRect(-w / 2, -h / 2, w, h, 22).fill({ color: fill, alpha: state === 'idle' ? 0.84 : 0.96 });
     cd.bg.roundRect(-w / 2, -h / 2, w, h, 22).stroke({

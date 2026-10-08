@@ -1,7 +1,7 @@
 import { Container, Graphics, Point, Sprite, Text, Texture, type FederatedPointerEvent } from 'pixi.js';
 import type { GameContext, GameInstance } from '@/sdk';
-import { clamp, damp, lerp, tween, TAU } from '@/sdk';
-import { createParticles, createPixiApp, glowTexture, gradientTexture } from '@/sdk/pixi';
+import { clamp, damp, lerp, mixHex, tween, TAU } from '@/sdk';
+import { createParticles, createPixiApp, glowTexture, gradientTexture, softShades, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import {
   HARMONY_STEP,
   MAX_HARMONY,
@@ -168,6 +168,45 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   banner.alpha = 0;
   ui.addChild(meter, meterTitle, hint, holdBadge, banner);
 
+  // Soft (dark neumorphism) look: the HARMONY meter becomes a raised tray with inset segment wells, and HOLD a
+  // round button that sinks in while held. The orbit scene itself stays painted.
+  const soft = () => ctx.settings.soft;
+  const SOFT_BASE = '#3a1b4f';
+  const sres = ctx.quality.maxDpr;
+  function setSoft(sp: Sprite, o: SoftTileOptions) {
+    sp.texture = softTileTexture(o);
+    const p = softTilePad(o);
+    sp.width = o.width + p * 2;
+    sp.height = o.height + p * 2;
+  }
+  const newTile = () => {
+    const t = new Sprite();
+    t.anchor.set(0.5);
+    return t;
+  };
+  const softLayer = new Container();
+  const tray = newTile();
+  const softFill = new Graphics();
+  softLayer.addChild(tray, softFill);
+  ui.addChildAt(softLayer, 0);
+  const holdTile = newTile();
+  holdBadge.addChildAt(holdTile, 0);
+  let holdPressed: boolean | null = null;
+  function setHoldTile(pressed: boolean) {
+    if (holdPressed === pressed) return;
+    holdPressed = pressed;
+    setSoft(holdTile, { width: 48, height: 48, base: SOFT_BASE, radius: 24, depth: pressed ? 2 : 5, resolution: sres });
+  }
+  // Inset well drawn with plain Graphics from softShades (cheap, redrawn only on layout/state changes):
+  // a dark rim on the top-left fading to the face colour, with a faint light lip on the bottom-right.
+  function softWell(g: Graphics, x: number, y: number, w: number, h: number, r: number, base: string, d = 3) {
+    const sh = softShades(base);
+    g.roundRect(x, y, w, h, r).fill({ color: mixHex(base, '#000000', 0.42) });
+    g.roundRect(x + d * 0.35, y + d * 0.35, w - d * 0.35, h - d * 0.35, Math.max(0, r - d * 0.2)).fill({ color: mixHex(base, '#000000', 0.22) });
+    g.roundRect(x + d * 0.75, y + d * 0.75, w - d * 0.75, h - d * 0.75, Math.max(0, r - d * 0.4)).fill({ color: mixHex(base, '#000000', 0.08) });
+    g.roundRect(x, y, w, h, r).stroke({ width: 1, color: sh.light, alpha: 0.45 });
+  }
+
   // ---------------- geometry
   let W = 0;
   let H = 0;
@@ -273,7 +312,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     meterLabels.forEach((t) => (t.style.fontSize = 10 * ts()));
     hint.position.set(cx, safe.y + 96);
     hint.style.fontSize = 17 * ts();
-    holdBadge.position.set(safe.x + safe.w - 42, my - 16);
+    holdBadge.position.set(safe.x + safe.w - (soft() ? 34 : 42), my - 16);
+    softLayer.visible = holdTile.visible = soft();
+    holdPressed = null;
+    if (soft()) setHoldTile(false);
     banner.position.set(cx, safe.y + safe.h * 0.2);
     banner.style.fontSize = 28 * ts();
     drawMeter();
@@ -331,12 +373,31 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   function drawMeter() {
     const hc = ctx.settings.highContrast;
     const my = safe.y + safe.h - 44;
-    const segW = Math.min(64, (safe.w - 120) / 4);
+    const segW = soft() ? Math.min(52, (safe.w - 150) / 4) : Math.min(64, (safe.w - 120) / 4);
     const gap = 8;
     const total = segW * 4 + gap * 3;
     const x0 = cx - total / 2;
     meter.clear();
     const col = harmonyColor(harmonyShow);
+    if (soft()) {
+      // raised tray, inset wells; a lit layer is a coloured pill inside its well (the label flips dark on it)
+      setSoft(tray, { width: total + 28, height: 78, base: SOFT_BASE, radius: 22, depth: 7, resolution: sres });
+      tray.position.set(cx, my - 5);
+      softFill.clear();
+      for (let i = 0; i < 4; i++) {
+        const x = x0 + i * (segW + gap);
+        const on = harmony > i;
+        softWell(softFill, x, my - 11, segW, 22, 11, SOFT_BASE, 3);
+        if (on) softFill.roundRect(x + 3, my - 8, segW - 6, 16, 8).fill({ color: col, alpha: 0.92 });
+        meterLabels[i].position.set(x + segW / 2, my);
+        meterLabels[i].style.fill = on ? 0x1a0f33 : 0xffffff;
+        meterLabels[i].alpha = on ? 1 : 0.6;
+      }
+      const prog = harmony >= MAX_HARMONY ? 1 : (streak % HARMONY_STEP) / HARMONY_STEP;
+      softWell(softFill, x0, my + 15, total, 8, 4, SOFT_BASE, 2);
+      if (prog > 0) softFill.roundRect(x0 + 1, my + 17, Math.max(4, (total - 2) * prog), 4, 2).fill({ color: col, alpha: 0.95 });
+      return;
+    }
     for (let i = 0; i < 4; i++) {
       const x = x0 + i * (segW + gap);
       const on = harmony > i;
@@ -768,9 +829,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
     // hold badge
     holdRing.clear();
-    holdRing.circle(0, 0, 20).fill({ color: hc ? 0x000000 : 0x1a1036, alpha: 0.7 });
-    holdRing.circle(0, 0, 20).stroke({ width: 2 + holdVis * 2, color: hc ? 0xffffff : col, alpha: 0.35 + holdVis * 0.65 });
-    if (holdVis > 0.05) holdRing.circle(0, 0, 20 * holdVis * 0.8).fill({ color: hc ? 0xffffff : col, alpha: 0.25 * holdVis });
+    if (soft()) {
+      const held = holdVis > 0.5;
+      setHoldTile(held);
+      if (held) softWell(holdRing, -21, -21, 42, 42, 21, SOFT_BASE, 4);
+      holdRing.circle(0, 0, 24).stroke({ width: 1.5 + holdVis * 1.5, color: col, alpha: 0.25 + holdVis * 0.75 });
+      if (holdVis > 0.05) holdRing.circle(0, 0, 18 * holdVis * 0.8).fill({ color: col, alpha: 0.2 * holdVis });
+    } else {
+      holdRing.circle(0, 0, 20).fill({ color: hc ? 0x000000 : 0x1a1036, alpha: 0.7 });
+      holdRing.circle(0, 0, 20).stroke({ width: 2 + holdVis * 2, color: hc ? 0xffffff : col, alpha: 0.35 + holdVis * 0.65 });
+      if (holdVis > 0.05) holdRing.circle(0, 0, 20 * holdVis * 0.8).fill({ color: hc ? 0xffffff : col, alpha: 0.25 * holdVis });
+    }
     holdText.text = toggled ? 'ON' : 'HOLD';
     holdBadge.alpha = running ? 1 : 0.4;
 

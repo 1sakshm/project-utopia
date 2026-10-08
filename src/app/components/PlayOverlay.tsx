@@ -409,7 +409,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   const showScore = m.showScore !== false;
 
   return (
-    <div className="play-overlay" ref={overlay} role="dialog" aria-modal="true" aria-label={`Playing ${m.title}`} style={{ background: m.palette.bg }}>
+    <div className="play-overlay" ref={overlay} role="dialog" aria-modal="true" aria-label={`Playing ${m.title}`} style={{ background: m.palette.bg, ['--gbg' as string]: m.palette.bg }}>
       <PosterArt manifest={m} className={`play-poster ${ready ? 'is-hidden' : ''}`} />
       <div ref={box} className={`play-box ${ready ? 'is-ready' : ''}`} />
 
@@ -448,7 +448,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
         </div>
       )}
 
-      {reviveAsk && <ReviveSheet gameId={gameId} done={reviveAsk} />}
+      {reviveAsk && phase !== 'results' && <ReviveSheet gameId={gameId} done={reviveAsk} />}
 
       {phase === 'howto' && (
         <div className="play-center">
@@ -503,7 +503,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
         </div>
       )}
 
-      {voiceAsk && (
+      {voiceAsk && phase !== 'results' && (
         <div className="play-center play-dim">
           <div className="glass-card small voice-consent" role="dialog" aria-modal="true" aria-labelledby="vc-title">
             <div className="vc-mic" aria-hidden>🎙️</div>

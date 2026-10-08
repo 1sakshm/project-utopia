@@ -5,6 +5,7 @@ import type { GameContext, GameInstance } from '@/sdk';
 import { damp, easeInOutSine } from '@/sdk';
 import { mountR3F, useGame, GameEffects, Motes, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
 import { levelDef, makeTrial, fishPos, trialScore, FISH_KEYS, keyText, MAX_FISH, MAX_LEVEL, TRIALS, type Trial } from './logic';
+import { clay, shade } from './soft';
 
 /** Pool ellipse radii in world units (portrait). */
 const RX = 2.2;
@@ -498,14 +499,22 @@ function Scene({ view, onTapAt, burstRef }: { view: View; onTapAt: (x: number, y
   const ctx = useGame();
   useSyncExternalStore(view.subscribe, view.getVersion);
   const hc = ctx.settings.highContrast;
+  const soft = ctx.settings.soft;
   const geo = useMemo(() => fishGeometry(), []);
   const count = view.trial?.count ?? 0;
   return (
     <>
       <CameraRig view={view} />
+      {soft && (
+        <>
+          {/* Soft look: lights only touch the clay rim and pebbles (everything else is unlit). */}
+          <hemisphereLight args={['#d8fff9', '#03141c', 0.9]} />
+          <directionalLight position={[-3, 4, 6]} intensity={1.1} color="#e8fffb" />
+        </>
+      )}
       <Floor />
       {!hc && <Coral />}
-      <PoolRim />
+      {soft ? <SoftRim /> : <PoolRim />}
       <Occluders view={view} />
       <Trails view={view} />
       {Array.from({ length: MAX_FISH }, (_, i) => (
@@ -619,6 +628,22 @@ function PoolRim() {
       <lineBasicMaterial color={hc ? '#ffffff' : '#5fe0d4'} transparent opacity={hc ? 0.6 : 0.14} />
     </lineLoop>
   );
+}
+
+/** Soft look: the pool is ringed by a raised, rounded clay lip instead of a thin glowing line. */
+function SoftRim() {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  const parts = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * (RX + 0.42), Math.sin(a) * (RY + 0.42), -1.5));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, true);
+    return { geo: new THREE.TubeGeometry(curve, 128, 0.17, 12, true), mat: clay(shade(bg, 0.12), { roughness: 0.92 }) };
+  }, [bg]);
+  return <mesh geometry={parts.geo} material={parts.mat} />;
 }
 
 function Coral() {
@@ -749,6 +774,7 @@ function Occluders({ view }: { view: View }) {
     return new THREE.CanvasTexture(c);
   }, []);
   const occ = view.trial?.occluders ?? [];
+  if (ctx.settings.soft) return <SoftOccluders occ={occ} />;
   return (
     <>
       {occ.map((o, k) => (
@@ -761,6 +787,25 @@ function Occluders({ view }: { view: View }) {
             <planeGeometry args={[1, 1]} />
             <meshBasicMaterial map={tex} color={hc ? '#333333' : '#0b3a44'} transparent opacity={0.9} depthWrite={false} />
           </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
+/** Soft look: occluders become smooth, opaque clay pebbles (same footprint, still fully hide the fish). */
+const pebbleGeo = { g: null as THREE.SphereGeometry | null };
+function SoftOccluders({ occ }: { occ: Array<{ x: number; y: number; r: number }> }) {
+  const ctx = useGame();
+  const bg = ctx.manifest.palette.bg2;
+  if (!pebbleGeo.g) pebbleGeo.g = new THREE.SphereGeometry(1, 32, 20);
+  const mats = useMemo(() => ({ a: clay(shade(bg, 0.1), { roughness: 0.95 }), b: clay(shade(bg, 0.18), { roughness: 0.95 }) }), [bg]);
+  return (
+    <>
+      {occ.map((o, k) => (
+        <group key={k} position={[o.x * RX, o.y * RY, 2]} rotation-z={k * 0.9}>
+          <mesh geometry={pebbleGeo.g!} material={mats.a} scale={[o.r * RX * 1.02, o.r * RY * 0.86, 0.35]} />
+          <mesh geometry={pebbleGeo.g!} material={mats.b} scale={[o.r * RX * 0.62, o.r * RY * 0.5, 0.3]} position={[-0.06, 0.06, 0.12]} rotation-z={0.4} />
         </group>
       ))}
     </>

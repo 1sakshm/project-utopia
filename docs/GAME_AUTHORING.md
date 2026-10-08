@@ -68,6 +68,7 @@ See `src/sdk/types.ts` for the full, commented interface. Most-used members:
 | `ctx.trial({correct, rtMs?, level?})` | Record each trial (local stats). |
 | `ctx.storage.get/set` | Per-game persisted KV (e.g. calibration, unlocked items). |
 | `ctx.revive()` | Second chance. If your game ends because lives/shields/misses ran out (before its natural end), `await ctx.revive()` first: the platform pauses and may offer an optional ad or a Second Wind boost. If it resolves `true`, restore **one** life and carry on; recheck `alive` after the await. Offered at most once per session; always `false` in preview. |
+| `ctx.settings.soft` | The player uses the **Soft** look (dark neumorphism) and high contrast is off. Draw tiles, cards, buttons and wells as soft extruded surfaces from your palette's background: Pixi games use `softTile()` / `softTileTexture()` / `softShades()` from `@/sdk/pixi` (raised, or `pressed: true` for inset; keep meaning in rims/icons, never colour only). 3D games use matte, rounded "clay" materials for platforms and UI-like objects. When `false`, render the original (Aurora) look unchanged. |
 | `ctx.end({ score, levelReached, stats, message? })` | Finish the session → platform results screen. |
 
 `GameInstance`: `{ start(), destroy(), onPause?(), onResume?(), onSettings?(s) }`.
