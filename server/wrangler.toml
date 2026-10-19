@@ -27,4 +27,4 @@ new_sqlite_classes = ["Lobby", "Match"]
 
 [vars]
 # Comma-separated list of origins allowed to open sockets, or "*" for any (fine for local dev).
-ALLOWED_ORIGINS = "https://playutopia.pages.dev,https://project-utopia-zeta.vercel.app"
+ALLOWED_ORIGINS = "https://playutopia.tech,https://www.playutopia.tech,https://playutopia.pages.dev,https://project-utopia-zeta.vercel.app"
