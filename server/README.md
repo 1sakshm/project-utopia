@@ -19,7 +19,7 @@ ghost:        nobody around? race a recorded run from another player (or your ow
 - `src/lobby.ts`: one global Durable Object. Presence, the "Live now" list, matchmaking, Elo ratings, leaderboard,
   recorded ghost runs.
 - `src/match.ts`: one Durable Object per room code. Room state machine `lobby → countdown → playing → done`,
-  30 s reconnect grace (then forfeit), 6 min round cap, rematches, emotes.
+  30 s reconnect grace (then forfeit), 60 s rounds, rematches, emotes.
 - `../src/platform/versus/protocol.ts`: the wire protocol, shared with the app.
 
 Both objects use the WebSocket Hibernation API, so idle sockets cost nothing.

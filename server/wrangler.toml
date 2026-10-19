@@ -18,7 +18,7 @@ class_name = "Match"
 [[d1_databases]]
 binding = "DB"
 database_name = "utopia"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "071b0a62-a321-4527-a2ee-cee702da5992"
 migrations_dir = "migrations"
 
 [[migrations]]
