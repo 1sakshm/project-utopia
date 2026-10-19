@@ -1,21 +1,23 @@
-import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
+import { Heart, Search, X } from 'lucide-react';
 import { GAMES } from '@/games/registry';
-import { RINGS, ABILITY_RING, ABILITY_LABEL, type RingId } from '@/platform/abilities';
+import { RINGS, ABILITY_RING, type RingId } from '@/platform/abilities';
 import { useProgress } from '@/platform/progress';
-import { navigate } from '../router';
-import { PosterArt, formatScore } from '../components/Common';
-import { AbilityGlyph, AbilityIcon, Hero, d, useReveal } from '../components/Editorial';
-import { IconHeart, IconPlay } from '../components/Icons';
-import '@/styles/library.css';
+import { GameTile } from '../components/GameTile';
+import { AdSlot } from '../components/AdSlot';
 
-type Energy = 'all' | 'calm' | 'focused' | 'active';
-type Tag = 'none' | 'noTime' | 'silent' | 'favorites';
+type Tag = 'favorites' | 'calm' | 'noTime' | 'silent' | 'new';
+const TAGS: Array<[Tag, string]> = [
+  ['favorites', 'Saved'],
+  ['new', 'Not played'],
+  ['calm', 'Calm'],
+  ['noTime', 'No time pressure'],
+  ['silent', 'No sound needed'],
+];
 
 export default function Library() {
-  const root = useRef<HTMLDivElement>(null);
   const [ring, setRing] = useState<RingId | 'all'>('all');
-  const [energy, setEnergy] = useState<Energy>('all');
-  const [tag, setTag] = useState<Tag>('none');
+  const [tags, setTags] = useState<Tag[]>([]);
   const [query, setQuery] = useState('');
   const games = useProgress((s) => s.games);
 
@@ -23,148 +25,80 @@ export default function Library() {
     const q = query.trim().toLowerCase();
     return GAMES.filter((g) => {
       const m = g.manifest;
+      const p = games[m.id];
       if (ring !== 'all' && ABILITY_RING[m.abilities.primary] !== ring) return false;
-      if (energy !== 'all' && m.energy !== energy) return false;
-      if (tag === 'noTime' && !m.accessibility.noTimePressure) return false;
-      if (tag === 'silent' && !m.accessibility.visualOnlyPlayable) return false;
-      if (tag === 'favorites' && !games[m.id]?.favorite) return false;
-      if (q && !`${m.title} ${m.hook} ${ABILITY_LABEL[m.abilities.primary]}`.toLowerCase().includes(q)) return false;
+      if (tags.includes('favorites') && !p?.favorite) return false;
+      if (tags.includes('new') && p?.sessions) return false;
+      if (tags.includes('calm') && m.energy !== 'calm') return false;
+      if (tags.includes('noTime') && !m.accessibility.noTimePressure) return false;
+      if (tags.includes('silent') && !m.accessibility.visualOnlyPlayable) return false;
+      if (q && !`${m.title} ${m.hook} ${m.abilities.primary}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [ring, energy, tag, query, games]);
+  }, [ring, tags, query, games]);
 
-  useReveal(root, [list]);
-  const filtered = ring !== 'all' || energy !== 'all' || tag !== 'none' || query.trim() !== '';
+  const toggle = (t: Tag) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  const clear = () => {
+    setRing('all');
+    setTags([]);
+    setQuery('');
+  };
 
   return (
-    <div className="ed-page" ref={root}>
-      <Hero
-        compact
-        kicker="Library"
-        title="Every little"
-        accent="world."
-        lead={`${GAMES.length} games across ${RINGS.length} families of focus, with more on the way.`}
-        palette={['#6c5cff', '#6fe3ff', '#ff8fb1']}
-      >
-        <label className="lib-search">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" />
-          </svg>
-          <input type="search" placeholder="Search games or abilities" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search games" />
-        </label>
-      </Hero>
+    <div className="page is-wide">
+      <div className="topbar">
+        <h1>
+          Games<span className="sub">{list.length === GAMES.length ? GAMES.length : `${list.length} of ${GAMES.length}`}</span>
+        </h1>
+      </div>
 
-      <section className="ab-section is-tight lib-filters">
-        <div className="ed-pills" role="group" aria-label="Filter by ability">
-          <button className="ed-pill" aria-pressed={ring === 'all'} onClick={() => setRing('all')}>
-            All abilities
+      <label className="field" style={{ marginBottom: 12 }}>
+        <Search size={17} aria-hidden />
+        <input type="search" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search games" />
+        {query && (
+          <button className="text-link" onClick={() => setQuery('')} aria-label="Clear search">
+            <X size={16} />
           </button>
-          {RINGS.map((r) => (
-            <button key={r.id} className="ed-pill" aria-pressed={ring === r.id} onClick={() => setRing(ring === r.id ? 'all' : r.id)}>
-              <AbilityIcon id={r.id} color={r.color} live={ring === r.id} size={22} />
-              {r.label}
-            </button>
-          ))}
-        </div>
-        <div className="ed-pills" role="group" aria-label="More filters">
-          {(['all', 'calm', 'focused', 'active'] as Energy[]).map((e) => (
-            <button key={e} className="ed-pill" aria-pressed={energy === e} onClick={() => setEnergy(e)}>
-              {e === 'all' ? 'Any energy' : e[0].toUpperCase() + e.slice(1)}
-            </button>
-          ))}
-          <span className="lib-sep" aria-hidden />
-          {(
-            [
-              ['favorites', '♡ Favorites'],
-              ['noTime', 'No time pressure'],
-              ['silent', 'Playable without sound'],
-            ] as Array<[Tag, string]>
-          ).map(([t, l]) => (
-            <button key={t} className="ed-pill" aria-pressed={tag === t} onClick={() => setTag(tag === t ? 'none' : t)}>
-              {l}
-            </button>
-          ))}
-        </div>
-        <p className="lib-count" aria-live="polite">
-          {filtered ? `${list.length} of ${GAMES.length} games` : `All ${GAMES.length} games`}
-          {filtered && (
-            <button
-              className="linkish lib-clear"
-              onClick={() => {
-                setRing('all');
-                setEnergy('all');
-                setTag('none');
-                setQuery('');
-              }}
-            >
-              Clear filters
-            </button>
-          )}
-        </p>
-      </section>
-
-      <section className="ab-section is-tight">
-        {list.length > 0 ? (
-          <ul className="lib2-grid">
-            {list.map((g, i) => {
-              const m = g.manifest;
-              const p = games[m.id];
-              const ringDef = RINGS.find((r) => r.id === ABILITY_RING[m.abilities.primary])!;
-              return (
-                <li key={m.id} data-reveal style={{ ...d(i % 4, 70), '--acc': m.palette.accent, '--acc2': m.palette.accent2 } as CSSProperties}>
-                  <button className="lib2-tile" onClick={() => navigate(`/game/${m.id}`)} aria-label={`${m.title}. ${m.hook}`}>
-                    <PosterArt manifest={m} className="lib2-poster" />
-                    <span className="lib2-glow" aria-hidden />
-                    <span className="lib2-scrim" aria-hidden />
-                    <span className="lib2-top">
-                      {!p?.sessions && <span className="lib2-new">New</span>}
-                      {p?.favorite && (
-                        <span className="lib2-fav" aria-label="Favorite">
-                          <IconHeart filled width={15} height={15} />
-                        </span>
-                      )}
-                    </span>
-                    <span className="lib2-play" aria-hidden>
-                      <IconPlay width={16} height={16} />
-                    </span>
-                    <span className="lib2-text">
-                      <span className="lib2-chip">
-                        <AbilityIcon id={ringDef.id} color={ringDef.color} size={18} />
-                        <span>{ABILITY_LABEL[m.abilities.primary]}</span>
-                      </span>
-                      <span className="lib2-title display">{m.title}</span>
-                      <span className="lib2-hook">{m.hook}</span>
-                      <span className="lib2-meta">
-                        {m.sessionLabel}
-                        {m.showScore !== false && p?.best ? <> · Best {formatScore(p.best)}</> : null}
-                      </span>
-                    </span>
-                    <span className="lib2-ring" style={{ color: ringDef.color }} aria-hidden />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="ed-card lib-empty" data-reveal>
-            <AbilityGlyph id="attention" />
-            <h3 className="display">Nothing matches, yet</h3>
-            <p>Try another ability or clear the filters. More games are on the way.</p>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setRing('all');
-                setEnergy('all');
-                setTag('none');
-                setQuery('');
-              }}
-            >
-              Show all games
-            </button>
-          </div>
         )}
-      </section>
+      </label>
+
+      <div className="pills" role="group" aria-label="Ability" style={{ marginBottom: 8 }}>
+        <button className="pill" aria-pressed={ring === 'all'} onClick={() => setRing('all')}>
+          All
+        </button>
+        {RINGS.map((r) => (
+          <button key={r.id} className="pill" aria-pressed={ring === r.id} onClick={() => setRing(ring === r.id ? 'all' : r.id)}>
+            {r.label.split(' ')[0]}
+          </button>
+        ))}
+      </div>
+      <div className="pills" role="group" aria-label="Filters" style={{ marginBottom: 20 }}>
+        {TAGS.map(([t, l]) => (
+          <button key={t} className="pill" aria-pressed={tags.includes(t)} onClick={() => toggle(t)}>
+            {t === 'favorites' && <Heart size={13} />}
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {list.length > 0 ? (
+        <ul className="tiles">
+          {list.map((g) => (
+            <li key={g.manifest.id}>
+              <GameTile m={g.manifest} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="empty">
+          <h3>No games match</h3>
+          <p>Try a different filter.</p>
+          <button className="btn" onClick={clear}>
+            Clear filters
+          </button>
+        </div>
+      )}
+      <AdSlot slot="games" />
     </div>
   );
 }

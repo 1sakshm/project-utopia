@@ -30,7 +30,9 @@ export type AnalyticsEvent =
   | { name: 'reward'; source: 'session' | 'quest' | 'double'; orbs: number }
   | { name: 'shop_purchase'; item: string; price: number }
   | { name: 'boost_used'; kind: string; via: 'inventory' | 'orbs' | 'ad'; game_id: string }
-  | { name: 'revive'; game_id: string; via: 'ad' | 'second-wind' | 'declined' };
+  | { name: 'revive'; game_id: string; via: 'ad' | 'second-wind' | 'declined' }
+  | { name: 'versus'; action: 'queue' | 'matched' | 'cancel' | 'create' | 'join' | 'start' | 'finish' | 'rematch' | 'leave' | 'ghost' | 'watch'; game_id?: string; kind?: string; wait_ms?: number; place?: number }
+  | { name: 'ad_impression'; slot: string };
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) || 'https://us.i.posthog.com';

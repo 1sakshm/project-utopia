@@ -8,7 +8,6 @@ import { audioEngine } from '@/runtime/audio';
 import { navigate } from '../router';
 import { Hero, SectionHead, useReveal } from '../components/Editorial';
 import { FEEDBACK_URL, FeedbackButton } from '../components/Feedback';
-import '@/styles/settings.css';
 
 type Opt<T> = ReadonlyArray<readonly [T, string]>;
 
@@ -27,9 +26,9 @@ function Group({ id, children }: { id: GroupId; children: ReactNode }) {
   const i = GROUPS.findIndex((g) => g.id === id);
   const g = GROUPS[i];
   return (
-    <section className="ab-section set2-group" id={`set-${id}`}>
-      <SectionHead index={i + 1} eyebrow={g.label} title={g.title} />
-      <div className="ed-card set2-card" data-reveal>
+    <section className="section set2-group" id={`set-${id}`}>
+      <SectionHead title={g.label} />
+      <div className="set2-card">
         {children}
       </div>
     </section>
@@ -205,23 +204,15 @@ export default function Settings() {
   };
 
   return (
-    <div className="ed-page settings2" ref={root}>
-      <Hero
-        compact
-        kicker="Settings"
-        title="Make it"
-        accent="yours."
-        lead="Every setting applies to every game, instantly. Set it once and forget it."
-        palette={['#ffb37a', '#b99cff', '#ff8fb1']}
-      >
-        <div className="ed-pills set2-jump" role="navigation" aria-label="Jump to a settings group">
-          {GROUPS.map((g) => (
-            <button key={g.id} className="ed-pill" onClick={() => jump(g.id)}>
-              {g.label}
-            </button>
-          ))}
-        </div>
-      </Hero>
+    <div className="page settings2" ref={root}>
+      <Hero back title="Settings" />
+      <div className="pills set2-jump" role="navigation" aria-label="Jump to a settings group">
+        {GROUPS.map((g) => (
+          <button key={g.id} className="pill" onClick={() => jump(g.id)}>
+            {g.label}
+          </button>
+        ))}
+      </div>
 
       <Group id="visual">
         <Toggle k="highContrast" label="High contrast" desc="Stronger outlines and colors, no fog or grain" />
@@ -252,15 +243,6 @@ export default function Settings() {
             [1.25, '125%'],
             [1.5, '150%'],
             [2, '200%'],
-          ]}
-        />
-        <Segmented
-          k="uiStyle"
-          label="Look"
-          desc="Soft is the dark neumorphic style, in the app and in the games; Aurora is the original glow look. High contrast replaces both."
-          options={[
-            ['soft', 'Soft'],
-            ['aurora', 'Aurora'],
           ]}
         />
         <Segmented
@@ -476,20 +458,9 @@ export default function Settings() {
         </ActionRow>
       </Group>
 
-      <section className="ab-section">
-        <button className="set2-about" data-reveal onClick={() => navigate('/about')}>
-          <span className="set2-about-orb" aria-hidden />
-          <span className="set2-about-text">
-            <small>About Utopia</small>
-            <b className="display">What these games are, and aren’t</b>
-            <span>Made by Saksham Sharma (&amp; Claude ;p)</span>
-          </span>
-          <span className="set2-about-arrow" aria-hidden>
-            →
-          </span>
-        </button>
+      <section className="section">
         {FEEDBACK_URL && (
-          <div className="set2-feedback" data-reveal>
+          <div className="notice set2-feedback">
             <p>
               <b>Tell me what you think.</b> What felt great, what felt hard, what you’d change. Every message is read.
             </p>

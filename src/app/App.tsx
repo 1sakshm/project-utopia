@@ -9,21 +9,20 @@ import { track, trackPage } from '@/platform/analytics';
 import { loadPosters } from '@/platform/posters';
 import { audioEngine } from '@/runtime/audio';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
-import { IconFeed, IconGrid, IconRings, IconSettings } from './components/Icons';
 import AdHost from './components/AdHost';
 import Home from './pages/Home';
-import { House } from 'lucide-react';
-
-const IconHome = () => <House size={22} strokeWidth={2} aria-hidden />;
+import { CircleUser, House, LayoutGrid, Swords } from 'lucide-react';
+import { Orb } from './components/Orb';
 import ErrorBoundary from './components/ErrorBoundary';
 import StorageNotice from './components/StorageNotice';
 import { useEconomy } from '@/platform/economy';
 import { SKINS, THEMES } from '@/platform/shop';
-import '@/styles/rewards.css';
+import { useVersusLive } from '@/platform/versus/live';
 
 const Library = lazy(() => import('./pages/Library'));
 const GameDetail = lazy(() => import('./pages/GameDetail'));
-const Progress = lazy(() => import('./pages/Progress'));
+const You = lazy(() => import('./pages/You'));
+const Versus = lazy(() => import('./pages/Versus'));
 const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Lab = lazy(() => import('./pages/Lab'));
@@ -31,21 +30,25 @@ const Shop = lazy(() => import('./pages/Shop'));
 const Landing = lazy(() => import('./pages/Landing'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 
+const icon = (I: typeof House) => () => <I size={21} strokeWidth={1.6} aria-hidden />;
 const TABS = [
-  { path: '/', label: 'Home', Icon: IconHome },
-  { path: '/feed', label: 'Play', Icon: IconFeed },
-  { path: '/library', label: 'Library', Icon: IconGrid },
-  { path: '/progress', label: 'Progress', Icon: IconRings },
-  { path: '/settings', label: 'Settings', Icon: IconSettings },
+  { path: '/', label: 'Home', Icon: icon(House), match: (p: string) => p === '/' },
+  { path: '/versus', label: 'Versus', Icon: icon(Swords), match: (p: string) => p.startsWith('/versus') },
+  { path: '/feed', label: 'Play', Icon: () => <Orb size={40} />, match: (p: string) => p === '/feed' || p.startsWith('/play/'), orb: true },
+  { path: '/library', label: 'Games', Icon: icon(LayoutGrid), match: (p: string) => p.startsWith('/library') || p.startsWith('/game/') },
+  { path: '/you', label: 'You', Icon: icon(CircleUser), match: (p: string) => ['/you', '/progress', '/settings', '/shop', '/about', '/privacy'].some((x) => p.startsWith(x)) },
 ];
+
 
 export default function App() {
   const path = useRoute((s) => s.path);
   const search = useRoute((s) => s.search);
   const settings = useSettings();
   const announce = usePlayUi((s) => s.announce);
+  const overlayOpen = usePlayUi((s) => s.overlays > 0);
   const feedSeen = useRef(false);
   const equipped = useEconomy((s) => s.equipped);
+  const liveInvite = useVersusLive((s) => !!s.queue || !!s.found);
 
   // Reflect settings globally (CSS + audio).
   useEffect(() => {
@@ -53,8 +56,6 @@ export default function App() {
     root.dataset.contrast = settings.highContrast ? 'high' : 'normal';
     root.dataset.reducedMotion = String(prefersReducedMotion(settings));
     root.dataset.readingFont = settings.readingFont;
-    // High contrast always wins over the soft (neumorphism) look.
-    root.dataset.style = settings.highContrast ? 'aurora' : settings.uiStyle;
     root.style.setProperty('--text-scale', String(settings.textScale));
     audioEngine.apply({ master: settings.master, music: settings.music, sfx: settings.sfx, voice: settings.voice, mono: settings.mono });
     audioEngine.calibrationMs = settings.calibrationMs;
@@ -67,11 +68,18 @@ export default function App() {
     const theme = THEMES.find((t) => t.id === equipped.theme) ?? THEMES[0];
     root.setProperty('--skin', skin.gradient);
     root.setProperty('--skin-glow', skin.glow);
+    root.setProperty('--avatar', skin.gradient);
     root.setProperty('--t1', theme.a1);
     root.setProperty('--t2', theme.a2);
     root.setProperty('--t3', theme.a3);
-    if (settings.highContrast || theme.id === 'theme-aurora') root.removeProperty('--accent');
-    else root.setProperty('--accent', theme.accent);
+    if (settings.highContrast || theme.id === 'theme-aurora') {
+      root.removeProperty('--accent');
+      root.removeProperty('--accent-text');
+    }
+    else {
+      root.setProperty('--accent', theme.accent);
+      root.setProperty('--accent-text', theme.accent);
+    }
   }, [equipped, settings.highContrast]);
 
   useEffect(() => {
@@ -116,7 +124,8 @@ export default function App() {
   let page: React.ReactNode = null;
   if (path === '/') page = <Home />;
   else if (path === '/library') page = <Library />;
-  else if (path === '/progress') page = <Progress />;
+  else if (path === '/you' || path === '/progress') page = <You />;
+  else if (path.startsWith('/versus')) page = <Versus path={path} />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/about') page = <About />;
   else if (path === '/shop') page = <Shop />;
@@ -126,21 +135,20 @@ export default function App() {
   else if (!onFeed && !play) page = <NotFound />;
 
   return (
-    <div className={`app ${play ? 'is-playing' : ''}`}>
+    <div className={`app ${play || overlayOpen ? 'is-playing' : ''}`}>
       <a href="#main" className="skip-link">
         Skip to content
       </a>
       <nav className="nav" aria-label="Main">
         <div className="nav-brand" aria-hidden>
-          <span className="brand-orb" />
-          <span className="display">Utopia</span>
+          <span className="brand-word">Utopia</span>
         </div>
-        {TABS.map(({ path: p, label, Icon }) => {
-          const active = p === '/' ? path === '/' : p === '/feed' ? onFeed || !!play : path.startsWith(p);
+        {TABS.map(({ path: p, label, Icon, match, orb }) => {
+          const active = match(path);
           return (
             <button
               key={p}
-              className={`nav-item ${active ? 'is-active' : ''}`}
+              className={`nav-item ${active ? 'is-active' : ''} ${orb ? 'is-orb' : ''}`}
               aria-current={active ? 'page' : undefined}
               onClick={() => {
                 audioEngine.uiTap();
@@ -149,6 +157,7 @@ export default function App() {
             >
               <Icon />
               <span>{label}</span>
+              {p === '/versus' && liveInvite && !active && <i className="nav-badge" aria-label="Matchmaking" />}
             </button>
           );
         })}
@@ -170,8 +179,8 @@ export default function App() {
       )}
       <StorageNotice />
       <AdHost />
-      <BreakReminder paused={!!play} />
-      <UpdateToast blocked={!!play} />
+      <BreakReminder paused={!!play || overlayOpen} />
+      <UpdateToast blocked={!!play || overlayOpen} />
       <div className="sr-only" aria-live="polite" role="status">
         {announce}
       </div>
@@ -182,11 +191,13 @@ export default function App() {
 function NotFound() {
   return (
     <div className="page">
-      <h1 className="display">Lost in the mist</h1>
-      <p className="muted">That page doesn’t exist.</p>
+      <div className="empty">
+      <h3>Page not found</h3>
+      <p>That page doesn’t exist.</p>
       <button className="btn btn-primary" onClick={() => navigate('/')}>
         Back home
       </button>
+      </div>
     </div>
   );
 }

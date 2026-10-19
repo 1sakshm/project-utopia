@@ -49,8 +49,8 @@ export default defineConfig(({ mode }) => ({
         name: 'Project Utopia',
         short_name: 'Utopia',
         description: 'Discover and play beautiful short games designed around memory, attention, rhythm, planning and calm.',
-        theme_color: '#0b0d14',
-        background_color: '#0b0d14',
+        theme_color: '#1f1d1a',
+        background_color: '#1f1d1a',
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => ({
         // Precache only the app shell. The 3D/2D engines, each game and the posters are cached the first time they're
         // used (so played games still work offline) instead of downloading everything on the first visit.
         globPatterns: ['**/*.{js,css,html,svg,woff2,png}'],
-        globIgnores: ['**/engine-*.js', '**/game-*.js', 'posters/**', 'art3d/**'],
+        globIgnores: ['**/engine-*.js', '**/game-*.js', 'posters/**'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
@@ -75,7 +75,7 @@ export default defineConfig(({ mode }) => ({
             options: { cacheName: 'utopia-code', expiration: { maxEntries: 80 } },
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/posters/') || url.pathname.startsWith('/art3d/'),
+            urlPattern: ({ url }) => url.pathname.startsWith('/posters/'),
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'utopia-posters', expiration: { maxEntries: 120 } },
           },

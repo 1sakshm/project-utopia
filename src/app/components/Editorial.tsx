@@ -1,181 +1,75 @@
-// Shared "editorial" page language: aurora hero, word-reveal headline, scroll reveals, section heads,
-// animated ability glyphs. Used by About, Library, Progress and Settings.
-import { useEffect, useRef, useState, type CSSProperties, type DependencyList, type ReactNode } from 'react';
+// Shared page primitives: a one-line page header, section heads, count-up numbers and ability glyphs.
+// (Kept under the old names so every page shares one quiet, flat language.)
+import { useEffect, useState, type CSSProperties, type DependencyList, type ReactNode } from 'react';
 import type { RingId } from '@/platform/abilities';
 import { prefersReducedMotion } from '@/platform/settings';
 import { navigate } from '../router';
-import { IconBack } from './Icons';
-import '@/styles/editorial.css';
+import { ChevronLeft } from 'lucide-react';
 
-/** Stagger delay helper: sets --d for CSS transitions/animations. */
-export const d = (i: number, step = 90) => ({ '--d': `${i * step}ms` }) as CSSProperties;
+/** Kept for callers that pass stagger styles; the flat design doesn't stagger. */
+export const d = (_i: number, _step = 90) => ({}) as CSSProperties;
 
-/**
- * Adds `.is-in` to [data-reveal] elements inside `root` as they scroll into view.
- * Re-scans when `deps` change, so lists that re-render (filters) reveal their new items too.
- */
-export function useReveal(root: React.RefObject<HTMLElement | null>, deps: DependencyList = []) {
-  useEffect(() => {
-    const el = root.current;
-    if (!el) return;
-    const targets = Array.from(el.querySelectorAll<HTMLElement>('[data-reveal]:not(.is-in)'));
-    if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
-      targets.forEach((t) => t.classList.add('is-in'));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            e.target.classList.add('is-in');
-            io.unobserve(e.target);
-          }
-        }
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -6% 0px' },
-    );
-    targets.forEach((t) => io.observe(t));
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [root, ...deps]);
-}
+/** No-op: content is shown immediately (no scroll-reveal choreography). */
+export function useReveal(_root: React.RefObject<HTMLElement | null>, _deps: DependencyList = []) {}
 
-/** Gentle pointer parallax (writes --mx/--my in -1..1 on the element). */
-export function useParallax(ref: React.RefObject<HTMLElement | null>) {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || prefersReducedMotion()) return;
-    let raf = 0;
-    const onMove = (e: PointerEvent) => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const r = el.getBoundingClientRect();
-        el.style.setProperty('--mx', (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3));
-        el.style.setProperty('--my', (((e.clientY - r.top) / Math.max(1, r.height)) * 2 - 1).toFixed(3));
-      });
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      cancelAnimationFrame(raf);
-    };
-  }, [ref]);
-}
-
-/** Headline words that blur-rise in one after another. Spaces live outside the inline-block spans. */
-export function Words({ text, start = 0 }: { text: string; start?: number }) {
+/** Back button used on secondary pages. */
+export function BackButton({ to = '/you' }: { to?: string }) {
   return (
-    <>
-      {text
-        .split(' ')
-        .filter(Boolean)
-        .map((w, i) => (
-          <span key={i}>
-            <span className="ab-word" style={d(start + i)}>
-              {w}
-            </span>{' '}
-          </span>
-        ))}
-    </>
+    <button className="icon-btn" aria-label="Back" onClick={() => (window.history.length > 1 ? window.history.back() : navigate(to))}>
+      <ChevronLeft />
+    </button>
   );
 }
 
 /**
- * Aurora hero. Title = `title` words + an italic gradient `accent` word + optional `tail` words.
- * `compact` is the shorter variant for tab pages.
+ * Page header. The old aurora hero's props are still accepted: `title + accent + tail` join into one plain title,
+ * `lead` becomes a single muted line, and `children` render below.
  */
 export function Hero({
-  kicker,
   title,
   accent,
   tail,
   lead,
-  compact = false,
   back = false,
-  palette,
   children,
 }: {
-  kicker: string;
+  kicker?: string;
   title: string;
-  accent: string;
+  accent?: string;
   tail?: string;
   lead?: ReactNode;
   compact?: boolean;
   back?: boolean;
-  /** Optional aurora colors [a, b, c]. */
   palette?: [string, string, string];
   children?: ReactNode;
 }) {
-  const ref = useRef<HTMLElement>(null);
-  useParallax(ref);
-  const titleWords = title.split(' ').filter(Boolean).length;
-  const tailWords = tail ? tail.split(' ').filter(Boolean).length : 0;
-  const style = palette ? ({ '--a1': palette[0], '--a2': palette[1], '--a3': palette[2] } as CSSProperties) : undefined;
+  const text = [title, accent, tail].filter(Boolean).join(' ').replace(/\s+([.,!?])/g, '$1');
   return (
-    <section className={`ab-hero ${compact ? 'is-compact' : ''}`} ref={ref} style={style}>
-      <div className="ab-aurora" aria-hidden>
-        <i className="b1" />
-        <i className="b2" />
-        <i className="b3" />
+    <header>
+      <div className="topbar">
+        {back && <BackButton />}
+        <h1>{text}</h1>
       </div>
-      <div className="ab-motes" aria-hidden>
-        {Array.from({ length: compact ? 9 : 14 }, (_, i) => (
-          <i key={i} style={{ '--i': i } as CSSProperties} />
-        ))}
-      </div>
-      <div className="ab-grain" aria-hidden />
-      {back && (
-        <button className="btn btn-ghost ab-back" onClick={() => (window.history.length > 1 ? window.history.back() : navigate('/settings'))}>
-          <IconBack width={18} height={18} /> Back
-        </button>
-      )}
-      <div className="ab-hero-inner">
-        <p className="ab-kicker ab-fade" style={d(0)}>
-          <span className="ab-orb" aria-hidden /> {kicker}
-        </p>
-        <h1 className="ab-title display">
-          <Words text={title} />
-          <span className="ab-word ab-italic" style={d(titleWords)}>
-            {accent}
-          </span>
-          {tail ? ' ' : null}
-          {tail && <Words text={tail} start={titleWords + 1} />}
-        </h1>
-        {lead && (
-          <p className="ab-lead ab-fade" style={d(titleWords + tailWords + 3)}>
-            {lead}
-          </p>
-        )}
-        {children && (
-          <div className="ab-hero-extra ab-fade" style={d(titleWords + tailWords + 5)}>
-            {children}
-          </div>
-        )}
-      </div>
-      {!compact && (
-        <div className="ab-scroll-cue" aria-hidden>
-          <span />
-        </div>
-      )}
-    </section>
-  );
-}
-
-export function SectionHead({ eyebrow, title, sub, index }: { eyebrow: string; title: string; sub?: ReactNode; index?: number }) {
-  return (
-    <header className="ab-head" data-reveal>
-      <p className="ab-eyebrow">
-        {index !== undefined && <span className="ab-eyebrow-num">{String(index).padStart(2, '0')}</span>}
-        {eyebrow}
-      </p>
-      <h2 className="display">{title}</h2>
-      {sub && <p className="ab-sub">{sub}</p>}
+      {lead && <p className="page-sub">{lead}</p>}
+      {children && <div style={{ marginBottom: 18 }}>{children}</div>}
     </header>
   );
 }
 
+export function SectionHead({ title, sub, right }: { eyebrow?: string; title: string; sub?: ReactNode; index?: number; right?: ReactNode }) {
+  return (
+    <>
+      <div className="section-head">
+        <h2>{title}</h2>
+        {right}
+      </div>
+      {sub && <p className="section-sub">{sub}</p>}
+    </>
+  );
+}
+
 /** Number that counts up from 0 when first rendered (instant under reduced motion). */
-export function CountUp({ value, duration = 1100 }: { value: number; duration?: number }) {
+export function CountUp({ value, duration = 700 }: { value: number; duration?: number }) {
   const [shown, setShown] = useState(() => (prefersReducedMotion() ? value : 0));
   useEffect(() => {
     if (prefersReducedMotion()) {
@@ -184,11 +78,9 @@ export function CountUp({ value, duration = 1100 }: { value: number; duration?: 
     }
     let raf = 0;
     const t0 = performance.now();
-    const from = 0;
     const tick = (now: number) => {
       const k = Math.min(1, (now - t0) / duration);
-      const e = 1 - Math.pow(1 - k, 3);
-      setShown(Math.round(from + (value - from) * e));
+      setShown(Math.round(value * (1 - Math.pow(1 - k, 3))));
       if (k < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -197,10 +89,10 @@ export function CountUp({ value, duration = 1100 }: { value: number; duration?: 
   return <>{shown.toLocaleString()}</>;
 }
 
-export function Stat({ value, label, animate = false }: { value: number | string; label: string; animate?: boolean }) {
+export function Stat({ value, label }: { value: number | string; label: string; animate?: boolean }) {
   return (
-    <div className="ab-stat">
-      <span className="display">{animate && typeof value === 'number' ? <CountUp value={value} /> : value}</span>
+    <div>
+      <b>{value}</b>
       <small>{label}</small>
     </div>
   );
@@ -269,12 +161,12 @@ const MINI: Record<RingId, ReactNode> = {
 };
 
 /**
- * Small ability badge: tinted disc + mini glyph. Still by default so long lists stay calm;
- * animates when `live`, or when an ancestor is hovered / focused / pressed / .is-active.
+ * Small ability badge: tinted square + mini glyph.
+ * Static, so long lists stay calm.
  */
-export function AbilityIcon({ id, color, live = false, size = 22 }: { id: RingId; color: string; live?: boolean; size?: number }) {
+export function AbilityIcon({ id, color, size = 18 }: { id: RingId; color: string; live?: boolean; size?: number }) {
   return (
-    <span className={`ab-icon ${live ? 'is-live' : ''}`} style={{ '--c': color, '--s': `${size}px` } as CSSProperties} aria-hidden>
+    <span className="ab-icon" style={{ '--c': color, '--s': `${size}px` } as CSSProperties} aria-hidden>
       <svg className="ab-glyph is-mini" viewBox="0 0 24 24">
         {MINI[id]}
       </svg>

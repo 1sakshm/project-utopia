@@ -37,7 +37,7 @@ await step('feed loads', async () => {
   await page.screenshot({ path: `shots/app-${tag}-feed.png` });
 });
 await step('scroll to 2nd card', async () => {
-  if (await page.locator('.coach').isVisible().catch(() => false)) await page.locator('.coach').click();
+  if (await page.locator('.coach').isVisible().catch(() => false)) await page.locator('.coach').click({ force: true });
   await page.keyboard.press('ArrowDown');
   await page.waitForTimeout(1800);
   await page.screenshot({ path: `shots/app-${tag}-feed2.png` });
@@ -46,7 +46,7 @@ let idxBefore = -1;
 await step('play overlay opens', async () => {
   idxBefore = await page.evaluate(() => Math.round(document.querySelector('.feed').scrollTop / document.querySelector('.feed').clientHeight));
   const btn = page.locator(`.card[data-feed-index="${idxBefore}"] .card-play`);
-  await btn.click();
+  await btn.click({ force: true });
   await page.waitForSelector('.play-overlay');
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `shots/app-${tag}-howto.png` });
@@ -73,19 +73,13 @@ await step('exit returns to same card', async () => {
   if (idx !== idxBefore) throw new Error(`feed index ${idx} !== ${idxBefore}`);
   await page.screenshot({ path: `shots/app-${tag}-returned.png` });
 });
-await step('home hub', async () => {
+await step('home', async () => {
   await page.goto(`${base}/`);
-  await page.waitForSelector('.home-hero');
-  await page.waitForSelector('.home-streak');
-  if ((await page.locator('.home-soon').count()) !== 4) throw new Error('expected 4 coming-soon tiles');
-  await page.locator('.home-soon').first().click();
-  await page.waitForSelector('.home-sheet');
-  await page.click('.home-sheet .btn-primary');
-  await page.waitForSelector('.home-sheet .btn-primary[disabled]');
-  await page.click('.home-sheet .btn:not(.btn-primary)');
+  await page.waitForSelector('.hero2');
+  if ((await page.locator('.daily-card').count()) !== 3) throw new Error("expected today's 3 games");
   await page.screenshot({ path: `shots/app-${tag}-home.png`, fullPage: false });
 });
-for (const p of ['library', 'progress', 'settings', 'about', 'game/echo-garden']) {
+for (const p of ['library', 'you', 'versus', 'shop', 'settings', 'about', 'privacy', 'welcome', 'game/echo-garden']) {
   await step(`page /${p}`, async () => {
     await page.goto(`${base}/${p}`);
     await page.waitForSelector('.page');

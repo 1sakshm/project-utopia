@@ -1,12 +1,16 @@
 import { useEffect } from 'react';
+import { CalendarDays, Heart, Play, Swords } from 'lucide-react';
 import { GAME_BY_ID } from '@/games/registry';
 import { useProgress } from '@/platform/progress';
+import { ABILITY_LABEL, ringOf } from '@/platform/abilities';
+import { VERSUS_ENABLED, ROOM_POOL } from '@/platform/versus/config';
+import { createRoom } from '@/platform/versus/match';
 import { navigate } from '../router';
 import { LivePreview, PosterArt, formatScore } from '../components/Common';
 import { GameInfo } from '../components/GameInfo';
-import { IconBack, IconCalendar, IconHeart, IconPlay } from '../components/Icons';
+import { AbilityIcon, BackButton } from '../components/Editorial';
+import { Sparkline } from '../components/Sparkline';
 import { openGame } from './Feed';
-import { Sparkline } from './Progress';
 
 export default function GameDetail({ id }: { id: string }) {
   const mod = GAME_BY_ID[id];
@@ -24,66 +28,88 @@ export default function GameDetail({ id }: { id: string }) {
   if (!mod) {
     return (
       <div className="page">
-        <h1 className="display">Game not found</h1>
-        <button className="btn" onClick={() => navigate('/library')}>
-          Browse library
-        </button>
+        <div className="empty">
+          <h3>Game not found</h3>
+          <button className="btn" onClick={() => navigate('/library')}>
+            All games
+          </button>
+        </div>
       </div>
     );
   }
   const m = mod.manifest;
+  const ring = ringOf(m.abilities.primary);
   const scores = history.filter((h) => h.gameId === id && h.mode === 'normal').slice(0, 20).reverse().map((h) => h.score);
+  const canDuel = VERSUS_ENABLED && ROOM_POOL.includes(id);
 
   return (
-    <div className="page detail">
-      <button className="btn btn-ghost back" onClick={() => (window.history.length > 1 ? window.history.back() : navigate('/library'))}>
-        <IconBack width={18} height={18} /> Back
-      </button>
+    <div className="page is-wide detail">
+      <div className="topbar">
+        <BackButton to="/library" />
+        <h1>{m.title}</h1>
+        <button className={`icon-btn ${prog?.favorite ? 'is-fav' : ''}`} aria-pressed={!!prog?.favorite} aria-label={prog?.favorite ? 'Remove from saved' : 'Save'} onClick={() => toggleFav(id)}>
+          <Heart fill={prog?.favorite ? 'currentColor' : 'none'} />
+        </button>
+      </div>
       <div className="detail-grid">
         <div className="detail-hero">
           <PosterArt manifest={m} />
           <LivePreview module={mod} active />
         </div>
         <div className="detail-body">
-          <h1 className="display detail-title">{m.title}</h1>
+          <p className="item-sub" style={{ marginBottom: 6 }}>
+            <AbilityIcon id={ring.id} color={ring.color} size={16} /> {ABILITY_LABEL[m.abilities.primary]} · {m.sessionLabel}
+          </p>
           <p className="detail-hook">{m.hook}</p>
-          <div className="row wrap">
+          <div className="detail-actions">
             <button className="btn btn-primary btn-lg" onClick={(e) => openGame(id, 'normal', e.currentTarget.closest('.detail')?.querySelector('.detail-hero'))}>
-              <IconPlay width={20} height={20} /> Play
+              <Play size={16} fill="currentColor" /> Play
             </button>
             <button className="btn btn-lg" onClick={() => openGame(id, 'daily', null)}>
-              <IconCalendar width={18} height={18} /> Daily seed
+              <CalendarDays size={16} /> Daily
             </button>
-            <button className={`icon-btn ${prog?.favorite ? 'is-fav' : ''}`} aria-pressed={!!prog?.favorite} aria-label="Favorite" onClick={() => toggleFav(id)}>
-              <IconHeart filled={!!prog?.favorite} />
-            </button>
+            {canDuel && (
+              <button
+                className="btn btn-lg"
+                onClick={async () => {
+                  try {
+                    navigate(`/versus/m/${await createRoom('duel', { gameId: id })}`);
+                  } catch {
+                    navigate('/versus');
+                  }
+                }}
+              >
+                <Swords size={16} /> Challenge
+              </button>
+            )}
           </div>
           {prog && prog.sessions > 0 && (
-            <div className="detail-stats">
+            <div className="stats" style={{ '--n': m.showScore !== false ? 3 : 2, marginTop: 16 } as React.CSSProperties}>
               {m.showScore !== false && (
-                <div className="stat">
-                  <span className="stat-v">{formatScore(prog.best)}</span>
-                  <span className="stat-l">Personal best</span>
+                <div>
+                  <b>{formatScore(prog.best)}</b>
+                  <small>best</small>
                 </div>
               )}
-              <div className="stat">
-                <span className="stat-v">{prog.highestLevel}</span>
-                <span className="stat-l">Highest level</span>
+              <div>
+                <b>{prog.highestLevel}</b>
+                <small>top level</small>
               </div>
-              <div className="stat">
-                <span className="stat-v">{prog.sessions}</span>
-                <span className="stat-l">Sessions</span>
+              <div>
+                <b>{prog.sessions}</b>
+                <small>plays</small>
               </div>
-              {scores.length > 1 && m.showScore !== false && (
-                <div className="stat stat-wide">
-                  <Sparkline values={scores} color={m.palette.accent} />
-                  <span className="stat-l">Recent scores</span>
-                </div>
-              )}
             </div>
           )}
-          <p className="sm-desc">{m.sessionLabel} · {m.energy} energy</p>
-          <GameInfo m={m} />
+          {scores.length > 1 && m.showScore !== false && (
+            <div className="spark-row">
+              <span className="fine">Recent scores</span>
+              <Sparkline values={scores} w={160} h={28} />
+            </div>
+          )}
+          <div style={{ marginTop: 22 }}>
+            <GameInfo m={m} />
+          </div>
         </div>
       </div>
     </div>

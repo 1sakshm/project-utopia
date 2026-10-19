@@ -2,12 +2,13 @@
 //  - 'mock' (default): an in-app, clearly labelled placeholder ad (5s) for development and until a real network
 //    is approved. No network calls, no tracking.
 //  - 'h5': Google H5 Games Ads (AdSense for games) via window.adBreak({ type: 'reward' }). Activate with
-//    VITE_ADS_PROVIDER=h5 once the site is approved and the adsbygoogle script (with data-ad-client=<your
-//    publisher id>) is added to index.html. Returns 'unavailable' if the API isn't present.
+//    VITE_ADS_PROVIDER=h5 and VITE_ADSENSE_CLIENT=ca-pub-… once the site is approved; the script is loaded on
+//    demand by adsense.ts. Returns 'unavailable' if the script is blocked or no ad is ready.
 import { create } from 'zustand';
 import { useEconomy } from './economy';
 import { track } from './analytics';
 import { ADS_MODE } from './adsConfig';
+import { loadAdSense } from './adsense';
 
 export type AdPlacement = 'double-orbs' | 'second-chance' | 'boost' | 'shop';
 export type AdResult = 'rewarded' | 'dismissed' | 'unavailable';
@@ -50,20 +51,31 @@ type AdBreak = (o: {
 }) => void;
 
 const h5Provider: AdProvider = {
-  showRewarded: (placement) =>
-    new Promise<AdResult>((resolve) => {
+  showRewarded: async (placement) => {
+    try {
+      await loadAdSense();
+    } catch {
+      return 'unavailable';
+    }
+    return new Promise<AdResult>((resolve) => {
       const adBreak = (window as unknown as { adBreak?: AdBreak }).adBreak;
       if (!adBreak) return resolve('unavailable');
       let result: AdResult = 'unavailable';
+      // Safety net: if the ad SDK never reports back, don't leave the player stuck.
+      const timer = window.setTimeout(() => resolve('unavailable'), 90_000);
       adBreak({
         type: 'reward',
         name: placement,
         beforeReward: (showAdFn) => showAdFn(),
         adDismissed: () => (result = 'dismissed'),
         adViewed: () => (result = 'rewarded'),
-        adBreakDone: () => resolve(result),
+        adBreakDone: () => {
+          window.clearTimeout(timer);
+          resolve(result);
+        },
       });
-    }),
+    });
+  },
 };
 
 const provider: AdProvider = ADS_MODE === 'h5' ? h5Provider : mockProvider;

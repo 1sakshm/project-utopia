@@ -1,0 +1,22 @@
+# Utopia Versus: realtime match server (Cloudflare Workers + Durable Objects).
+#   npm run dev      -> ws://localhost:8787 (no Cloudflare account needed locally)
+#   npm run deploy   -> needs `npx wrangler login` once
+name = "utopia-versus"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[durable_objects.bindings]]
+name = "MATCH"
+class_name = "Match"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby", "Match"]
+
+[vars]
+# Comma-separated list of origins allowed to open sockets, or "*" for any (fine for local dev).
+ALLOWED_ORIGINS = "*"

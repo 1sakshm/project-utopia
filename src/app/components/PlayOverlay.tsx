@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { GAME_BY_ID } from '@/games/registry';
 import type { HudState, SessionSummary } from '@/sdk/types';
 import { dailySeed } from '@/sdk/rng';
@@ -21,8 +21,9 @@ import { BOOST_ORB_PRICE } from '@/platform/shop';
 import { ABILITY_RING } from '@/platform/abilities';
 import { nextUp, starText, starsFor, trioStatus, type TrioStatus } from '@/platform/retention';
 import { shareToday } from './shareCard';
+import { burst, burstFrom, flyOrbs } from '../fx';
 
-type Phase = 'loading' | 'boost' | 'howto' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
+type Phase = 'loading' | 'boost' | 'howto' | 'versus-wait' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
 type BoostKind = 'slowmo' | 'secondWind';
 
 interface ResultInfo {
@@ -39,7 +40,26 @@ interface ResultInfo {
   nextId: string | null;
 }
 
-export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: boolean }) {
+/** Versus mode: the room supplies the seed and the start signal; scores stream out; results come from the room. */
+export interface VersusPlay {
+  seed: number;
+  /** Becomes true when the round starts (all players start together). */
+  go: boolean;
+  /** Seconds left in the shared countdown, or null. */
+  countdown: number | null;
+  /** The round was closed by the server (time cap): stop and show the result. */
+  ended?: boolean;
+  onScore: (score: number, level: number) => void;
+  onDone: (summary: SessionSummary) => void;
+  /** Leaving mid-round forfeits. */
+  onLeave: () => void;
+  /** Opponent strip shown under the HUD. */
+  hud?: ReactNode;
+  /** Card shown after this player finishes (waiting for others / final standings). */
+  result?: ReactNode;
+}
+
+export default function PlayOverlay({ gameId, daily, versus }: { gameId: string; daily: boolean; versus?: VersusPlay }) {
   const mod = GAME_BY_ID[gameId];
   const m = mod?.manifest;
   const overlay = useRef<HTMLDivElement>(null);
@@ -49,6 +69,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   const phaseRef = useRef<Phase>('loading');
   const [runId, setRunId] = useState(0);
   const [hud, setHud] = useState<HudState>({});
+  const hudRef = useRef<HudState>({});
   const [caption, setCaption] = useState<string | null>(null);
   const [result, setResult] = useState<ResultInfo | null>(null);
   const [count, setCount] = useState(0);
@@ -59,13 +80,17 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   const [voiceAsk, setVoiceAsk] = useState<null | ((c: 'mic' | 'typing') => void)>(null);
   const [reviveAsk, setReviveAsk] = useState<null | ((granted: boolean) => void)>(null);
   // Boosts chosen before the run (picker shows once per opening, before the host is created).
+  const vs = useRef(versus);
+  vs.current = versus;
   const [boosts, setBoosts] = useState<null | Record<BoostKind, boolean>>(() =>
-    useSettings.getState().showBoostPicker && mod?.manifest.showScore !== false && useProgress.getState().get(gameId).tutorialDone ? null : { slowmo: false, secondWind: false },
+    !versus && useSettings.getState().showBoostPicker && mod?.manifest.showScore !== false && useProgress.getState().get(gameId).tutorialDone ? null : { slowmo: false, secondWind: false },
   );
   const assisted = useRef(false);
   const windLoaded = useRef(false);
   const reviveOpen = useRef(false);
   const say = usePlayUi((s) => s.say);
+
+  useEffect(() => usePlayUi.getState().overlayOpened(), []);
 
   const go = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -96,6 +121,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
   useEffect(() => {
     if (!mod || !box.current) return;
     setReady(false);
+    hudRef.current = {};
     setHud({});
     setResult(null);
     setError(null);
@@ -107,7 +133,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     assisted.current = boosts.slowmo;
     windLoaded.current = boosts.secondWind;
     const t0 = performance.now();
-    const seed = daily ? dailySeed(gameId) : (Math.random() * 2 ** 31) | 0;
+    const seed = vs.current ? vs.current.seed : daily ? dailySeed(gameId) : (Math.random() * 2 ** 31) | 0;
     const onRevive = () => {
       if (windLoaded.current) {
         // A pre-loaded Second Wind kicks in automatically.
@@ -132,10 +158,16 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       mode: 'play',
       variant: daily ? 'daily' : 'normal',
       seed,
-      startLevel: startLevelFor(gameId),
+      // Versus rounds start everyone at level 1 so the same seed means the same game.
+      startLevel: vs.current ? 1 : startLevelFor(gameId),
       boost: { slowmo: boosts.slowmo },
-      onRevive,
-      onHud: (p) => setHud((prev) => (p ? { ...prev, ...p } : {})),
+      onRevive: vs.current ? undefined : onRevive,
+      onHud: (p) => {
+        // Merge outside React's updater so streaming the score (a store update) never happens during render.
+        hudRef.current = p ? { ...hudRef.current, ...p } : {};
+        setHud(hudRef.current);
+        if (p && (p.score !== undefined || p.level !== undefined)) vs.current?.onScore(hudRef.current.score ?? 0, hudRef.current.level ?? 0);
+      },
       onCaption: (t) => setCaption(t),
       onAnnounce: (t) => say(t),
       onEnd: (s) => finish(s, h),
@@ -162,7 +194,8 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       setReady(true);
       track({ name: 'game_load', game_id: gameId, tti_ms: Math.round(performance.now() - t0), from: usePlayUi.getState().openedInApp ? 'feed' : 'deeplink' });
       const prog = useProgress.getState().get(gameId);
-      if (!prog.tutorialDone && runId === 0) go('howto');
+      if (vs.current) go('versus-wait');
+      else if (!prog.tutorialDone && runId === 0) go('howto');
       else begin(h);
     });
     return () => {
@@ -172,6 +205,21 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mod, runId, daily, boosts]);
+
+  // Versus: start the moment the room says go (the game has usually finished loading during the countdown).
+  useEffect(() => {
+    if (versus?.go && phaseRef.current === 'versus-wait') begin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versus?.go, phase]);
+
+  // Versus: the server closed the round (time cap) before this player finished.
+  useEffect(() => {
+    if (!versus?.ended || phaseRef.current === 'results') return;
+    host.current?.pause();
+    setConfirmExit(false);
+    go('results');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versus?.ended]);
 
   function begin(h = host.current) {
     if (!h) return;
@@ -326,12 +374,20 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
     const nextId = trio && !trio.complete ? trio.ids[trio.done.findIndex((d) => !d)] : nextUp(gameId);
     setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards, starsBefore, starsAfter, trio, nextId });
     go('results');
+    vs.current?.onDone(s);
     say(`Session complete. ${m.showScore !== false ? `Score ${s.score}.` : ''} ${isPb ? 'New personal best!' : ''}`);
     if (isPb) audioEngine.uiPlay();
   }
 
   function requestExit() {
     const h = host.current;
+    if (vs.current) {
+      if (phaseRef.current === 'results') return vs.current.onLeave();
+      h?.pause();
+      if (phaseRef.current === 'playing') go('paused');
+      setConfirmExit(true);
+      return;
+    }
     if (phaseRef.current === 'playing' && h && h.elapsed() > 60000 && useSettings.getState().confirmExit) {
       h.pause();
       go('paused');
@@ -343,6 +399,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
 
   function doExit(after?: () => void) {
     const h = host.current;
+    if (vs.current) return vs.current.onLeave();
     const elapsed = h?.elapsed() ?? 0;
     track({ name: 'game_exit', game_id: gameId, state: phaseRef.current, elapsed_ms: Math.round(elapsed) });
     if (phaseRef.current !== 'results' && elapsed < 10000 && elapsed > 0) {
@@ -418,12 +475,17 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
         <button className="icon-btn" onClick={requestExit} aria-label="Exit game">
           <IconClose />
         </button>
-        {(phase === 'playing' || phase === 'paused' || phase === 'countdown') && <Hud hud={hud} showScore={showScore} />}
+        {(phase === 'playing' || phase === 'paused' || phase === 'countdown' || phase === 'versus-wait') && (
+          <div className="hud">
+            {phase !== 'versus-wait' && <Hud hud={hud} showScore={showScore} />}
+            {versus?.hud}
+          </div>
+        )}
         <button
           className="icon-btn"
           onClick={() => (phase === 'paused' ? resume() : pause())}
           aria-label={phase === 'paused' ? 'Resume' : 'Pause'}
-          disabled={phase !== 'playing' && phase !== 'paused'}
+          disabled={(phase !== 'playing' && phase !== 'paused') || (!!versus && phase === 'paused' && confirmExit)}
         >
           {phase === 'paused' ? <IconPlay /> : <IconPause />}
         </button>
@@ -456,6 +518,26 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
         </div>
       )}
 
+      {phase === 'versus-wait' && (
+        <div className="play-center">
+          {versus?.countdown ? (
+            <div className="countdown" key={versus.countdown} aria-live="assertive">
+              {versus.countdown}
+            </div>
+          ) : (
+            <div className="play-loading">
+              <h2>{m.title}</h2>
+              <p className="muted">Waiting for the round to start…</p>
+            </div>
+          )}
+          <ol className="versus-howto">
+            {m.howTo.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {phase === 'countdown' && (
         <div className="play-center">
           <div className="countdown" key={count} aria-live="assertive">
@@ -472,9 +554,9 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
             <PauseMenu
               title={m.title}
               onResume={resume}
-              onRestart={() => restart('restart')}
+              onRestart={versus ? undefined : () => restart('restart')}
               onHowTo={() => setShowHowTo(true)}
-              onExit={() => doExit()}
+              onExit={() => (versus ? setConfirmExit(true) : doExit())}
             />
           )}
         </div>
@@ -483,21 +565,23 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
       {confirmExit && (
         <div className="play-center play-dim">
           <div className="glass-card small">
-            <h2 className="display">Exit this game?</h2>
-            <p className="muted">Progress for this round won’t be saved.</p>
+            <h2 className="display">{versus ? 'Leave this match?' : 'Exit this game?'}</h2>
+            <p className="muted">{versus ? 'Leaving now counts as a loss.' : 'Progress for this round won’t be saved.'}</p>
             <div className="row">
               <button className="btn" onClick={() => { setConfirmExit(false); resume(); }}>
                 Stay
               </button>
               <button className="btn btn-primary" onClick={() => doExit()} autoFocus>
-                Exit
+                {versus ? 'Leave' : 'Exit'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {phase === 'results' && result && (
+      {phase === 'results' && versus && <div className="play-center play-dim">{versus.result}</div>}
+
+      {phase === 'results' && result && !versus && (
         <div className="play-center play-dim">
           <Results m={m} r={result} onAgain={() => restart('play_again')} onExit={() => doExit()} onNext={nextGame} />
         </div>
@@ -551,7 +635,7 @@ export default function PlayOverlay({ gameId, daily }: { gameId: string; daily: 
 
 function Hud({ hud, showScore }: { hud: HudState; showScore: boolean }) {
   return (
-    <div className="hud" aria-live="off">
+    <div className="hud-stack" aria-live="off">
       <div className="hud-row">
         {showScore && hud.score !== undefined && (
           <span className="hud-score" aria-label={`Score ${hud.score}`}>
@@ -605,7 +689,7 @@ function HowToCard({ m, onGo, goLabel = 'Let’s go' }: { m: { title: string; ho
   );
 }
 
-function PauseMenu({ title, onResume, onRestart, onHowTo, onExit }: { title: string; onResume: () => void; onRestart: () => void; onHowTo: () => void; onExit: () => void }) {
+function PauseMenu({ title, onResume, onRestart, onHowTo, onExit }: { title: string; onResume: () => void; onRestart?: () => void; onHowTo: () => void; onExit: () => void }) {
   const s = useSettings();
   return (
     <div className="glass-card pause">
@@ -615,9 +699,11 @@ function PauseMenu({ title, onResume, onRestart, onHowTo, onExit }: { title: str
         <button className="btn btn-primary btn-lg" onClick={onResume} autoFocus>
           <IconPlay width={18} height={18} /> Resume
         </button>
-        <button className="btn" onClick={onRestart}>
-          <IconRestart width={18} height={18} /> Restart
-        </button>
+        {onRestart && (
+          <button className="btn" onClick={onRestart}>
+            <IconRestart width={18} height={18} /> Restart
+          </button>
+        )}
         <button className="btn" onClick={onHowTo}>
           How to play
         </button>
@@ -672,13 +758,28 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
   const nextM = r.nextId ? GAME_BY_ID[r.nextId]?.manifest : null;
   const trioNext = !!r.trio && !r.trio.complete;
   const [shared, setShared] = useState(false);
+  const scoreRef = useRef<HTMLDivElement>(null);
+  // Celebrate: confetti for a new best or a level-up, a smaller pop for a new star.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (r.isPb || r.rewards.levelAfter > r.rewards.levelBefore) {
+        burstFrom(scoreRef.current, { count: 110, power: 1.1 });
+        window.setTimeout(() => burst(innerWidth * 0.2, innerHeight * 0.35, { count: 50, power: 0.8 }), 220);
+        window.setTimeout(() => burst(innerWidth * 0.8, innerHeight * 0.35, { count: 50, power: 0.8 }), 380);
+        audioEngine.uiPlay();
+      } else if (r.starsAfter > r.starsBefore) burstFrom(scoreRef.current, { count: 40, power: 0.6, colors: ['#ffd23f', '#fff2a8', '#ffffff'] });
+    }, 450);
+    return () => window.clearTimeout(t);
+  }, [r]);
   return (
     <div className="glass-card results">
       <p className="eyebrow">{m.title}</p>
       {showScore ? (
         <>
           {r.assisted && <span className="boosted-pill">Boosted run · scored separately</span>}
-          <div className={`results-score ${r.isPb ? 'is-pb' : ''}`}>{formatScore(s.score)}</div>
+          <div ref={scoreRef} className={`results-score ${r.isPb ? 'is-pb' : ''}`}>
+            <CountUp value={s.score} duration={900} />
+          </div>
           <p className="results-unit">{m.scoreLabel}</p>
           {r.isPb && <p className="pb-badge">✦ New {r.assisted ? 'boosted ' : ''}best</p>}
           {!r.isPb && r.prevBest > 0 && <p className="muted">Your {r.assisted ? 'boosted ' : ''}best: {formatScore(r.prevBest)}</p>}
@@ -933,6 +1034,13 @@ function RewardsRow({ rewards }: { rewards: SessionRewards }) {
   const [busy, setBusy] = useState(false);
   const canAd = useEconomy((s) => s.canWatchAd());
   const orbs = doubled ? rewards.orbs * 2 : rewards.orbs;
+  const chip = useRef<HTMLSpanElement>(null);
+  const wallet = useRef<HTMLSpanElement>(null);
+  // Orbs pop out of the reward and stream into the wallet.
+  useEffect(() => {
+    const t = window.setTimeout(() => flyOrbs(chip.current, wallet.current?.querySelector('.wallet') ?? null, Math.min(18, 6 + Math.round(orbs / 4)), '#ffd23f', () => audioEngine.uiTap()), 900);
+    return () => window.clearTimeout(t);
+  }, [orbs]);
   async function double() {
     setBusy(true);
     const r = await showRewardedAd('double-orbs');
@@ -945,7 +1053,7 @@ function RewardsRow({ rewards }: { rewards: SessionRewards }) {
   return (
     <>
       <div className="rewards" aria-label="Rewards">
-        <span className="reward-chip">
+        <span className="reward-chip" ref={chip}>
           <i className="coin sm" aria-hidden /> +<CountUp value={orbs} duration={700} /> orbs
         </span>
         <span className="reward-chip">
@@ -957,14 +1065,16 @@ function RewardsRow({ rewards }: { rewards: SessionRewards }) {
             ✓ {q.title}
           </span>
         ))}
-        <Wallet />
+        <span ref={wallet} className="rewards-wallet">
+          <Wallet />
+        </span>
       </div>
       {!doubled && canAd && rewards.orbs > 0 && (
         <button className="btn double-btn" onClick={() => void double()} disabled={busy}>
-          ▶ Double your orbs with a short ad (+{rewards.orbs})
+          ▶ Watch an ad: double orbs (+{rewards.orbs})
         </button>
       )}
-      {rewards.questsCompleted.length > 0 && <p className="fine">Claim quest rewards in Progress.</p>}
+      {rewards.questsCompleted.length > 0 && <p className="fine">Claim quest rewards in You.</p>}
     </>
   );
 }

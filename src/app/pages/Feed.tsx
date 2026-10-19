@@ -10,7 +10,7 @@ import { navigate, useRoute } from '../router';
 import { LivePreview, PosterArt, formatScore } from '../components/Common';
 import { AbilityIcon } from '../components/Editorial';
 import { FeedbackButton } from '../components/Feedback';
-import { ABILITY_LABEL, RINGS, ringOf } from '@/platform/abilities';
+import { ABILITY_LABEL, ringOf } from '@/platform/abilities';
 import { STAR_HINT, starText, starsFor, trioStatus } from '@/platform/retention';
 import { shareToday } from '../components/shareCard';
 import { GameInfo } from '../components/GameInfo';
@@ -246,23 +246,6 @@ export default function Feed({ hidden }: { hidden: boolean }) {
 
   return (
     <div className={`feed-shell ${hidden ? 'is-hidden' : ''}`} inert={hidden} aria-hidden={hidden}>
-      <div
-        className="feed-ambient ab-aurora"
-        style={
-          activeGame
-            ? ({
-                '--a1': activeGame.manifest.palette.accent,
-                '--a2': activeGame.manifest.palette.accent2,
-                '--a3': activeGame.manifest.palette.highlight,
-              } as React.CSSProperties)
-            : undefined
-        }
-        aria-hidden
-      >
-        <i className="b1" />
-        <i className="b2" />
-        <i className="b3" />
-      </div>
       <div className="feed-column">
         <div className="feed" ref={scroller} tabIndex={-1} aria-label="Game feed" role="feed">
           {items.map((it, i) => (
@@ -302,14 +285,14 @@ export default function Feed({ hidden }: { hidden: boolean }) {
           aria-label={`About ${activeGame.manifest.title}`}
           style={{ ['--acc' as string]: activeGame.manifest.palette.accent, ['--acc2' as string]: activeGame.manifest.palette.accent2 }}
         >
-          <p className="ab-eyebrow feed-side-eyebrow">
-            <AbilityIcon id={ringOf(activeGame.manifest.abilities.primary).id} color={ringOf(activeGame.manifest.abilities.primary).color} live size={22} />
-            {ABILITY_LABEL[activeGame.manifest.abilities.primary]}
+          <p className="item-sub">
+            <AbilityIcon id={ringOf(activeGame.manifest.abilities.primary).id} color={ringOf(activeGame.manifest.abilities.primary).color} size={16} />
+            {ABILITY_LABEL[activeGame.manifest.abilities.primary]} · {activeGame.manifest.sessionLabel}
           </p>
-          <FeedTitle title={activeGame.manifest.title} as="p" className="feed-side-title" />
+          <p className="feed-side-title">{activeGame.manifest.title}</p>
           <p className="feed-side-desc">{activeGame.manifest.description}</p>
           <GameInfo m={activeGame.manifest} compact />
-          <button className="btn" onClick={() => navigate(`/game/${activeGame.manifest.id}`)}>
+          <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => navigate(`/game/${activeGame.manifest.id}`)}>
             Full details
           </button>
         </aside>
@@ -455,10 +438,10 @@ function GameCard({
       </div>
       <div className="card-meta">
         <p className="card-kicker">
-          <AbilityIcon id={ring.id} color={ring.color} live={active} size={22} />
+          <AbilityIcon id={ring.id} color={ring.color} size={16} />
           <span>{ABILITY_LABEL[m.abilities.primary]}</span>
         </p>
-        <FeedTitle title={m.title} />
+        <h2 className="card-title">{m.title}</h2>
         <p className="card-hook">{m.hook}</p>
         <div className="card-stats">
           <span className="card-stat">{m.sessionLabel}</span>
@@ -473,99 +456,63 @@ function GameCard({
         </div>
       </div>
       <button
-        className="btn btn-primary btn-lg card-play"
+        className="btn btn-primary btn-xl card-play"
         onClick={() => {
           track({ name: 'feed_card_action', game_id: m.id, action: 'play' });
           openGame(m.id, item.variant, cardRef.current);
         }}
         aria-label={`Play ${m.title}`}
       >
-        <IconPlay width={20} height={20} /> Play
+        <IconPlay width={17} height={17} /> Play
       </button>
     </article>
   );
 }
 
-/** Editorial title: last word in the game's gradient italic; words rise in when the card is active. */
-function FeedTitle({ title, as: Tag = 'h2', className = '' }: { title: string; as?: 'h2' | 'p'; className?: string }) {
-  const words = title.split(' ');
-  return (
-    <Tag className={`card-title display ${className}`}>
-      {words.map((w, i) => (
-        <span key={i}>
-          <span className={`card-word ${i === words.length - 1 ? 'is-accent' : ''}`} style={{ ['--d' as string]: `${i * 90}ms` }}>
-            {w}
-          </span>
-          {i < words.length - 1 ? ' ' : null}
-        </span>
-      ))}
-    </Tag>
-  );
-}
-
-/** "Today's 3": the same three games for everyone today, with progress and a share button when done. */
+/** "Today's 3": the same three games for everyone today. */
 function TodayCard({ index, active }: { index: number; active: boolean }) {
   const games = useProgress((s) => s.games);
   const st = trioStatus(games);
   const [shared, setShared] = useState(false);
   const nextIdx = st.done.findIndex((d) => !d);
-  const reset = (() => {
-    const now = new Date();
-    const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const mins = Math.max(1, Math.round((end - now.getTime()) / 60000));
-    return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
-  })();
   return (
-    <article className={`card card-today ${active ? 'is-active' : ''}`} data-feed-index={index} aria-label={`Today's 3: ${st.count} of 3 played`}>
-      <div className="ab-aurora end-aurora" aria-hidden>
-        <i className="b1" />
-        <i className="b2" />
-        <i className="b3" />
-      </div>
-      <div className="today-inner">
-        <p className="ab-kicker">
-          <span className="ab-orb" aria-hidden /> Today’s 3 · same for everyone
-        </p>
-        <FeedTitle title={st.complete ? 'All three, done.' : 'Three little worlds for today.'} className="end-title" />
-        <ol className="today-list">
+    <article className={`card ${active ? 'is-active' : ''}`} data-feed-index={index} aria-label={`Today's 3: ${st.count} of 3 played`}>
+      <div className="card-panel">
+        <p className="fine">Today · same three for everyone</p>
+        <h2>{st.complete ? 'All three done.' : `${st.count} of 3 played`}</h2>
+        <ol className="list">
           {st.ids.map((id, i) => {
             const m = GAME_BY_ID[id].manifest;
-            const ring = ringOf(m.abilities.primary);
             return (
               <li key={id}>
-                <button className={`today-game ${st.done[i] ? 'is-done' : ''}`} onClick={() => openGame(id, 'daily', null)} aria-label={`${m.title}${st.done[i] ? ', done' : ''}`}>
-                  <span className="today-poster" style={{ backgroundImage: `url(/posters/${id}.jpg)` }} aria-hidden />
-                  <span className="today-text">
-                    <small>
-                      <AbilityIcon id={ring.id} color={ring.color} size={16} live={active} /> {ABILITY_LABEL[m.abilities.primary]}
-                    </small>
-                    <b>{m.title}</b>
+                <button className={`item ${st.done[i] ? 'is-done' : ''}`} onClick={() => openGame(id, 'daily', null)} aria-label={`${m.title}${st.done[i] ? ', done' : ''}`}>
+                  <span className="item-thumb" style={{ backgroundImage: `url(/posters/${id}.jpg)` }} aria-hidden />
+                  <span className="item-body">
+                    <span className="item-title">{m.title}</span>
+                    <span className="item-sub">{ABILITY_LABEL[m.abilities.primary]}</span>
                   </span>
-                  <span className="today-state">{st.done[i] ? `✓ ${formatScore(st.scores[i])}` : '▶'}</span>
+                  <span className="item-end">{st.done[i] ? <b>{formatScore(st.scores[i])}</b> : <IconPlay width={16} height={16} />}</span>
                 </button>
               </li>
             );
           })}
         </ol>
-        <div className="today-actions">
-          {st.complete ? (
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={async () => {
-                track({ name: 'share', what: 'today' });
-                const res = await shareToday(st);
-                if (res === 'copied') setShared(true);
-              }}
-            >
-              {shared ? 'Copied ✓' : 'Share my day'}
-            </button>
-          ) : (
-            <button className="btn btn-primary btn-lg" onClick={() => openGame(st.ids[nextIdx], 'daily', null)}>
-              <IconPlay width={18} height={18} /> {st.count === 0 ? 'Start today’s 3' : `Play ${st.count + 1} of 3`}
-            </button>
-          )}
-          <p className="today-fine">New games in {reset}. Missing a day costs nothing.</p>
-        </div>
+        {st.complete ? (
+          <button
+            className="btn btn-lg"
+            onClick={async () => {
+              track({ name: 'share', what: 'today' });
+              const res = await shareToday(st);
+              if (res === 'copied') setShared(true);
+            }}
+          >
+            {shared ? 'Copied' : 'Share my day'}
+          </button>
+        ) : (
+          <button className="btn btn-primary btn-lg" onClick={() => openGame(st.ids[nextIdx], 'daily', null)}>
+            <IconPlay width={16} height={16} /> {st.count === 0 ? 'Start' : `Play ${st.count + 1} of 3`}
+          </button>
+        )}
       </div>
     </article>
   );
@@ -574,37 +521,14 @@ function TodayCard({ index, active }: { index: number; active: boolean }) {
 function EndCard({ cycle, index, active, onNext }: { cycle: number; index: number; active: boolean; onNext: () => void }) {
   const route = useRoute((s) => s.navigate);
   return (
-    <article className={`card card-end ${active ? 'is-active' : ''}`} data-feed-index={index}>
-      <div className="ab-aurora end-aurora" aria-hidden>
-        <i className="b1" />
-        <i className="b2" />
-        <i className="b3" />
-      </div>
-      <div className="end-inner">
-        <p className="ab-kicker">
-          <span className="ab-orb" aria-hidden /> {cycle === 0 ? 'End of the feed' : 'Today’s seeds'}
-        </p>
-        <FeedTitle title={cycle === 0 ? 'You’ve seen them all.' : 'That’s every seed.'} className="end-title" />
-        <p className="end-lead">
-          {cycle === 0
-            ? 'Every little world, seen once. Replay a favorite, browse by ability, or keep going for today’s Daily Seeds: the same puzzles everyone gets today.'
-            : 'You’ve reached the very end. Maybe a good moment for a stretch, or a slow breath with Still Water.'}
-        </p>
-        <div className="end-glyphs" aria-hidden>
-          {RINGS.map((r, i) => (
-            <span key={r.id} style={{ ['--d' as string]: `${i * 70}ms` }}>
-              <AbilityIcon id={r.id} color={r.color} live={active} size={34} />
-            </span>
-          ))}
-        </div>
-        <div className="end-actions">
-          <FeedbackButton from="end-card" />
-          <button className="btn" onClick={() => route('/library')}>
-            <IconGrid width={18} height={18} /> Browse library
-          </button>
+    <article className={`card ${active ? 'is-active' : ''}`} data-feed-index={index}>
+      <div className="card-panel">
+        <h2>{cycle === 0 ? 'You’ve seen every game.' : 'That’s every daily seed.'}</h2>
+        <p className="muted">{cycle === 0 ? 'Keep going for today’s daily seeds: the same puzzles everyone gets today.' : 'Good moment for a break.'}</p>
+        <div className="row">
           {cycle === 0 ? (
             <button className="btn btn-primary" onClick={onNext}>
-              <IconCalendar width={18} height={18} /> Today’s Daily Seeds
+              <IconCalendar width={16} height={16} /> Daily seeds
             </button>
           ) : (
             GAME_BY_ID['still-water'] && (
@@ -613,6 +537,10 @@ function EndCard({ cycle, index, active, onNext }: { cycle: number; index: numbe
               </button>
             )
           )}
+          <button className="btn" onClick={() => route('/library')}>
+            <IconGrid width={16} height={16} /> All games
+          </button>
+          <FeedbackButton from="end-card" />
         </div>
       </div>
     </article>

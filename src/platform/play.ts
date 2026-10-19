@@ -7,6 +7,10 @@ interface PlayUi {
   /** True when the overlay was opened from within the app (so Exit can history.back()). */
   openedInApp: boolean;
   announce: string;
+  /** Number of play overlays mounted (the app hides its nav while > 0). */
+  overlays: number;
+  /** Call on mount; returns the unmount cleanup. */
+  overlayOpened: () => () => void;
   setOrigin: (r: DOMRect | null) => void;
   say: (text: string) => void;
 }
@@ -15,6 +19,11 @@ export const usePlayUi = create<PlayUi>((set) => ({
   originRect: null,
   openedInApp: false,
   announce: '',
+  overlays: 0,
+  overlayOpened: () => {
+    set((s) => ({ overlays: s.overlays + 1 }));
+    return () => set((s) => ({ overlays: Math.max(0, s.overlays - 1) }));
+  },
   setOrigin: (r) => set({ originRect: r, openedInApp: true }),
   say: (text) => set({ announce: text }),
 }));

@@ -9,8 +9,8 @@ export interface Settings {
   previewStyle: 'auto' | 'live' | 'still';
   textScale: number;
   readingFont: 'default' | 'atkinson';
-  /** App look: 'soft' = dark neumorphism (extruded surfaces, also inside games); 'aurora' = the original glass look. */
-  uiStyle: 'soft' | 'aurora';
+  /** App color theme. 'system' follows the device. */
+  theme: 'system' | 'dark' | 'light';
   flashIntensity: 'normal' | 'reduced' | 'none';
   master: number;
   music: number;
@@ -49,7 +49,7 @@ export const defaultSettings: Settings = {
   previewStyle: 'auto',
   textScale: 1,
   readingFont: 'default',
-  uiStyle: 'soft',
+  theme: 'dark',
   flashIntensity: 'normal',
   master: 0.8,
   music: 0.5,
@@ -93,12 +93,18 @@ export const useSettings = create<SettingsStore>()(
     {
       name: 'utopia.settings',
       storage: safeJSONStorage(),
-      version: 2,
+      version: 3,
       // v2: anonymous analytics became on-by-default (with an off switch). Earlier saves stored the old
       // default (off) without the player ever choosing it, so they move to the new default once.
+      // v3: the soft/aurora looks were replaced by one flat design with a light/dark theme.
       migrate: (persisted, version) => {
-        const st = (persisted ?? {}) as Partial<Settings>;
-        return (version < 2 ? { ...st, analytics: true } : st) as SettingsStore;
+        let st = (persisted ?? {}) as Partial<Settings> & { uiStyle?: string };
+        if (version < 2) st = { ...st, analytics: true };
+        if (version < 3) {
+          delete st.uiStyle;
+          st = { ...st, theme: 'dark' };
+        }
+        return st as SettingsStore;
       },
     },
   ),
@@ -124,6 +130,6 @@ export function toGameSettings(s: Settings = useSettings.getState()): GameSettin
     readingFont: s.readingFont,
     textScale: s.textScale,
     leftHanded: s.leftHanded,
-    soft: s.uiStyle === 'soft' && !s.highContrast,
+    soft: false,
   };
 }
