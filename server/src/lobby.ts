@@ -1,29 +1,23 @@
-// Lobby: one global Durable Object. Holds the dashboard sockets (presence + live match list), the quick-match
-// queue, Elo ratings and recorded "ghost" runs. Uses the WebSocket Hibernation API, so per-socket state lives in
+// Lobby: one global Durable Object. Holds the dashboard sockets (presence, live match list, live invites), the
+// quick-match queue and recorded "ghost" runs. Players, ratings and friends live in D1 (db.ts). Uses the WebSocket Hibernation API, so per-socket state lives in
 // socket attachments and anything durable lives in storage.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  elo,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
-  START_RATING,
   type GhostRun,
   type LeaderRow,
   type LobbyIn,
   type LobbyOut,
   type MatchSummary,
-  type Record_,
 } from '../../src/platform/versus/protocol';
 import { cleanName, matchOf, PID_RE, type Env } from './util';
+import * as db from './db';
 
 interface Att {
   pid: string;
   name: string;
   queue?: { gameId: string | null; fallback: string; relaxed: boolean; since: number; rating: number };
-}
-
-interface StoredRecord extends Record_ {
-  name: string;
 }
 
 const MATCH_TTL_MS = 15 * 60_000;
@@ -104,18 +98,20 @@ export class Lobby extends DurableObject<Env> {
     switch (msg.t) {
       case 'hello': {
         if (!PID_RE.test(msg.pid)) return this.send(ws, { t: 'error', msg: 'Bad player id' });
-        const name = cleanName(msg.name) || 'Player';
-        ws.serializeAttachment({ pid: msg.pid, name } satisfies Att);
-        const me = await this.record(msg.pid);
-        this.send(ws, { t: 'snapshot', online: this.onlineCount(), matches: this.visibleMatches(), leaders: await this.leaders(), me });
+        const row = await db.authenticate(this.env, msg.pid, msg.key);
+        if (!row) return this.send(ws, { t: 'error', msg: 'Not signed in', auth: true });
+        const wasOnline = this.isOnline(msg.pid);
+        ws.serializeAttachment({ pid: msg.pid, name: row.name } satisfies Att);
+        this.send(ws, { t: 'snapshot', online: this.onlineCount(), matches: this.visibleMatches(), leaders: await this.leaders(), me: db.recordOf(row) });
         this.broadcast({ t: 'online', online: this.onlineCount() }, ws);
+        if (!wasOnline) await this.pokeFriends(msg.pid);
         return;
       }
       case 'queue': {
         if (!a.pid) return;
         const ok = (id: string | null) => id === null || /^[a-z0-9-]{2,40}$/.test(id);
         if (!ok(msg.gameId) || !ok(msg.fallback) || !msg.fallback) return;
-        const rec = await this.record(a.pid);
+        const rec = db.recordOf(await db.getPlayer(this.env, a.pid));
         a.queue = { gameId: msg.gameId, fallback: msg.fallback, relaxed: !!msg.relaxed, since: Date.now(), rating: rec.rating };
         ws.serializeAttachment(a);
         await this.tryPair(ws, a);
@@ -139,11 +135,35 @@ export class Lobby extends DurableObject<Env> {
     } catch {
       /* already closed */
     }
-    this.broadcast({ t: 'online', online: this.onlineCount(ws) }, ws);
+    await this.gone(ws);
   }
 
   async webSocketError(ws: WebSocket) {
+    await this.gone(ws);
+  }
+
+  private async gone(ws: WebSocket) {
     this.broadcast({ t: 'online', online: this.onlineCount(ws) }, ws);
+    const pid = this.att(ws).pid;
+    if (pid && !this.isOnline(pid, ws)) {
+      await db.getPlayer(this.env, pid).then((r) => r && this.env.DB.prepare('UPDATE players SET last_seen = ? WHERE id = ?').bind(Date.now(), pid).run());
+      await this.pokeFriends(pid);
+    }
+  }
+
+  private isOnline(pid: string, except?: WebSocket) {
+    return this.open().some((w) => w !== except && this.att(w).pid === pid);
+  }
+
+  /** Tell a player's online friends to refresh (presence changed). */
+  private async pokeFriends(pid: string) {
+    try {
+      const ids = new Set(await db.friendIds(this.env, pid));
+      if (!ids.size) return;
+      for (const w of this.open()) if (ids.has(this.att(w).pid)) this.send(w, { t: 'social' });
+    } catch (e) {
+      console.warn('pokeFriends', e);
+    }
   }
 
   // ---------- matchmaking ----------
@@ -239,53 +259,43 @@ export class Lobby extends DurableObject<Env> {
     }, 1000);
   }
 
-  // ---------- RPC: ratings ----------
-  async record(pid: string): Promise<Record_> {
-    const r = await this.ctx.storage.get<StoredRecord>(`r:${pid}`);
-    return r ? { rating: r.rating, w: r.w, l: r.l, d: r.d } : { rating: START_RATING, w: 0, l: 0, d: 0 };
+  // ---------- RPC: presence, notifications, ratings ----------
+  async onlineCountRpc(): Promise<number> {
+    return this.onlineCount();
   }
 
-  /** Apply a ranked duel result. `outcome` is from A's side: 1 win, 0.5 draw, 0 loss. Returns rating deltas. */
-  async applyResult(a: { pid: string; name: string }, b: { pid: string; name: string }, outcome: 1 | 0.5 | 0) {
-    const ra = await this.ctx.storage.get<StoredRecord>(`r:${a.pid}`) ?? { name: a.name, rating: START_RATING, w: 0, l: 0, d: 0 };
-    const rb = await this.ctx.storage.get<StoredRecord>(`r:${b.pid}`) ?? { name: b.name, rating: START_RATING, w: 0, l: 0, d: 0 };
-    const da = elo(ra.rating, rb.rating, outcome);
-    const db = elo(rb.rating, ra.rating, (1 - outcome) as 1 | 0.5 | 0);
-    ra.rating = Math.max(100, ra.rating + da);
-    rb.rating = Math.max(100, rb.rating + db);
-    ra.name = a.name;
-    rb.name = b.name;
-    if (outcome === 1) {
-      ra.w++;
-      rb.l++;
-    } else if (outcome === 0) {
-      ra.l++;
-      rb.w++;
-    } else {
-      ra.d++;
-      rb.d++;
+  async onlineOf(pids: string[]): Promise<string[]> {
+    const on = new Set(this.open().map((w) => this.att(w).pid));
+    return pids.filter((p) => on.has(p));
+  }
+
+  /** Push a message to every socket of a player. Returns whether they were online. */
+  async notify(pid: string, msg: LobbyOut): Promise<boolean> {
+    let hit = false;
+    for (const w of this.open()) {
+      if (this.att(w).pid !== pid) continue;
+      this.send(w, msg);
+      hit = true;
     }
-    await this.ctx.storage.put({ [`r:${a.pid}`]: ra, [`r:${b.pid}`]: rb });
+    return hit;
+  }
+
+  /** After a ranked result: everyone gets the new board, the players get their own record. */
+  async refreshFor(pids: string[]) {
     this.leadersCache = null;
     const leaders = await this.leaders();
-    // Everyone gets the new board; the two players also get their own record.
+    const mine = new Map<string, LobbyOut>();
+    for (const pid of pids) mine.set(pid, { t: 'leaders', leaders, me: db.recordOf(await db.getPlayer(this.env, pid)) });
     for (const w of this.open()) {
       const at = this.att(w);
       if (!at.pid) continue;
-      const me = at.pid === a.pid ? ra : at.pid === b.pid ? rb : undefined;
-      this.send(w, { t: 'leaders', leaders, me: me && { rating: me.rating, w: me.w, l: me.l, d: me.d } });
+      this.send(w, mine.get(at.pid) ?? { t: 'leaders', leaders });
     }
-    return { da, db };
   }
 
   async leaders(): Promise<LeaderRow[]> {
     if (this.leadersCache) return this.leadersCache;
-    const all = await this.ctx.storage.list<StoredRecord>({ prefix: 'r:' });
-    this.leadersCache = [...all.values()]
-      .filter((r) => r.w + r.l + r.d > 0)
-      .sort((x, y) => y.rating - x.rating)
-      .slice(0, LEADERS)
-      .map((r) => ({ name: r.name, rating: r.rating, w: r.w, l: r.l, d: r.d }));
+    this.leadersCache = await db.leaders(this.env, LEADERS);
     return this.leadersCache;
   }
 
@@ -294,6 +304,10 @@ export class Lobby extends DurableObject<Env> {
   async adminReset(what: Array<'ratings' | 'ghosts' | 'matches'>) {
     const prefixes = { ratings: 'r:', ghosts: 'g:', matches: 'm:' } as const;
     let removed = 0;
+    if (what.includes('ratings')) {
+      const r = await this.env.DB.prepare('UPDATE players SET rating = 1000, wins = 0, losses = 0, draws = 0').run();
+      removed += r.meta.changes ?? 0;
+    }
     for (const w of what) {
       const keys = [...(await this.ctx.storage.list({ prefix: prefixes[w] })).keys()];
       for (let i = 0; i < keys.length; i += 128) removed += await this.ctx.storage.delete(keys.slice(i, i + 128));

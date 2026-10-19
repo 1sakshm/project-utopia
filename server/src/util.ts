@@ -15,6 +15,8 @@ export interface Env {
   LOBBY: DurableObjectNamespace<Lobby>;
   MATCH: DurableObjectNamespace<Match>;
   ALLOWED_ORIGINS: string;
+  /** Players, friends, challenges, match history (Cloudflare D1). */
+  DB: D1Database;
   /** Secret for /admin/* (set with `wrangler secret put ADMIN_TOKEN`). Admin routes are off without it. */
   ADMIN_TOKEN?: string;
 }

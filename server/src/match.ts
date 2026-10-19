@@ -6,8 +6,8 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   COUNTDOWN_MS,
   EMOTES,
-  ROUND_CAP_MS,
-  START_RATING,
+  ROUND_GRACE_MS,
+  ROUND_MS,
   type MatchIn,
   type MatchOut,
   type MatchSummary,
@@ -15,7 +15,8 @@ import {
   type RoomKind,
   type RoomView,
 } from '../../src/platform/versus/protocol';
-import { cleanName, lobbyOf, PID_RE, type Env } from './util';
+import { lobbyOf, PID_RE, type Env } from './util';
+import * as db from './db';
 
 interface Att {
   pid: string;
@@ -217,25 +218,28 @@ export class Match extends DurableObject<Env> {
     switch (msg.t) {
       case 'hello': {
         if (!PID_RE.test(msg.pid)) return this.send(ws, { t: 'error', msg: 'Bad player id', fatal: true });
-        const name = cleanName(msg.name) || 'Player';
+        const row = await db.authenticate(this.env, msg.pid, msg.key);
+        if (!row) return this.send(ws, { t: 'error', msg: 'Not signed in', fatal: true });
+        const name = row.name;
         const existing = r.players.find((p) => p.pid === msg.pid);
         let spectate = !!msg.spectate;
         if (existing && !spectate) {
           existing.connected = true;
           existing.leftAt = 0;
           existing.name = name;
+          existing.handle = row.handle;
+          existing.skin = row.skin;
         } else if (!spectate) {
           const allowed = !r.expect || r.expect.includes(msg.pid);
           if (r.state !== 'lobby' && r.state !== 'done') spectate = true;
           else if (r.players.length >= r.max || !allowed) spectate = true;
           else {
-            const rec = await lobbyOf(this.env)
-              .record(msg.pid)
-              .catch(() => ({ rating: START_RATING }));
             r.players.push({
               pid: msg.pid,
               name,
-              rating: rec.rating,
+              handle: row.handle,
+              skin: row.skin,
+              rating: row.rating,
               ready: false,
               connected: true,
               score: 0,
@@ -306,6 +310,7 @@ export class Match extends DurableObject<Env> {
       case 'score':
       case 'done': {
         if (!me || me.done || (r.state !== 'playing' && r.state !== 'countdown')) return;
+        if (now > r.endsAt + ROUND_GRACE_MS) return; // the clock has run out
         if (msg.t === 'score' && now - a.lastScore < SCORE_MIN_INTERVAL) return;
         const s = Math.max(0, Math.min(1e9, Math.floor(Number(msg.s) || 0)));
         const l = Math.max(0, Math.min(1e4, Math.floor(Number(msg.l) || 0)));
@@ -432,7 +437,7 @@ export class Match extends DurableObject<Env> {
     r.state = 'countdown';
     r.seed = crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
     r.startAt = now + COUNTDOWN_MS;
-    r.endsAt = r.startAt + ROUND_CAP_MS;
+    r.endsAt = r.startAt + ROUND_MS;
     for (const p of r.players) {
       p.score = 0;
       p.level = 0;
@@ -465,18 +470,22 @@ export class Match extends DurableObject<Env> {
       p.place = prev && !prev.forfeit && !p.forfeit && prev.score === p.score ? prev.place : i + 1;
     });
     const lobby = lobbyOf(this.env);
-    if (r.ranked && r.players.length === 2) {
-      const [a, b] = r.players;
-      const outcome: 1 | 0.5 | 0 = a.place === b.place ? 0.5 : a.place! < b.place! ? 1 : 0;
-      try {
-        const { da, db } = await lobby.applyResult({ pid: a.pid, name: a.name }, { pid: b.pid, name: b.name }, outcome);
-        a.delta = da;
-        b.delta = db;
-        a.rating += da;
-        b.rating += db;
-      } catch (e) {
-        console.warn('rating update failed', e);
+    try {
+      const deltas = await db.recordMatch(this.env, {
+        code: r.code,
+        gameId: r.gameId,
+        kind: r.kind,
+        ranked: r.ranked && r.players.length === 2,
+        players: r.players.map((p) => ({ pid: p.pid, score: p.score, place: p.place!, forfeit: p.forfeit })),
+      });
+      for (const p of r.players) {
+        if (deltas[p.pid] === undefined) continue;
+        p.delta = deltas[p.pid];
+        p.rating += deltas[p.pid];
       }
+      if (Object.keys(deltas).length) await lobby.refreshFor(Object.keys(deltas));
+    } catch (e) {
+      console.warn('recording the match failed', e);
     }
     if (r.gameId) {
       for (const p of r.players) {
@@ -496,7 +505,7 @@ export class Match extends DurableObject<Env> {
     let at = now + IDLE_MS;
     if (r.state === 'countdown') at = r.startAt;
     else if (r.state === 'playing') {
-      at = r.endsAt;
+      at = r.endsAt + ROUND_GRACE_MS;
       for (const p of r.players) if (!p.connected && !p.done && p.leftAt) at = Math.min(at, p.leftAt + GRACE_MS);
     }
     await this.ctx.storage.setAlarm(Math.max(now + 50, at));
@@ -522,7 +531,7 @@ export class Match extends DurableObject<Env> {
           changed = true;
         }
       }
-      if (now >= r.endsAt || this.allDone()) {
+      if (now >= r.endsAt + ROUND_GRACE_MS - 20 || this.allDone()) {
         await this.finish();
         return;
       }

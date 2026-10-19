@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Info, Pencil, Settings as Cog, ShieldCheck, ShoppingBag } from 'lucide-react';
+import { ChevronRight, Info, Pencil, Settings as Cog, ShieldCheck, ShoppingBag, UserRound, Users } from 'lucide-react';
 import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { RINGS, ABILITY_RING, type RingId } from '@/platform/abilities';
 import { useProgress } from '@/platform/progress';
@@ -30,6 +30,7 @@ export default function You() {
   const xp = useEconomy((s) => s.xp);
   const lp = levelProgress(xp);
   const name = useProfile((s) => s.name);
+  const handle = useProfile((s) => s.handle);
   const record = useVersusLive((s) => s.me);
   const [nameOpen, setNameOpen] = useState(false);
   const [allBests, setAllBests] = useState(false);
@@ -76,6 +77,7 @@ export default function You() {
             {name} <Pencil size={13} className="dim" aria-hidden />
           </span>
           <span className="item-sub">
+            {handle && <span className="handle">@{handle}</span>}
             Level {lp.level} · {lp.span - lp.into} XP to {lp.level + 1}
           </span>
           <span className="bar" style={{ marginTop: 6 }} aria-hidden>
@@ -184,6 +186,8 @@ export default function You() {
         <ul className="list">
           {(
             [
+              ...(handle ? ([[`/@${handle}`, 'My profile', UserRound]] as const) : []),
+              ['/friends', 'Friends', Users],
               ['/shop', 'Shop', ShoppingBag],
               ['/settings', 'Settings', Cog],
               ['/about', 'About Utopia', Info],

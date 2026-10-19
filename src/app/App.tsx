@@ -18,11 +18,17 @@ import StorageNotice from './components/StorageNotice';
 import { useEconomy } from '@/platform/economy';
 import { SKINS, THEMES } from '@/platform/shop';
 import { useVersusLive } from '@/platform/versus/live';
+import { VERSUS_ENABLED } from '@/platform/versus/config';
+import { answerInvite, ensureRegistered, pendingCount, useSocial } from '@/platform/social';
+import { GAME_BY_ID as GAMES_BY_ID } from '@/games/registry';
 
 const Library = lazy(() => import('./pages/Library'));
 const GameDetail = lazy(() => import('./pages/GameDetail'));
 const You = lazy(() => import('./pages/You'));
 const Versus = lazy(() => import('./pages/Versus'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Friends = lazy(() => import('./pages/Friends'));
+const Admin = lazy(() => import('./pages/Admin'));
 const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Lab = lazy(() => import('./pages/Lab'));
@@ -33,7 +39,7 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const icon = (I: typeof House) => () => <I size={21} strokeWidth={1.6} aria-hidden />;
 const TABS = [
   { path: '/', label: 'Home', Icon: icon(House), match: (p: string) => p === '/' },
-  { path: '/versus', label: 'Versus', Icon: icon(Swords), match: (p: string) => p.startsWith('/versus') },
+  { path: '/versus', label: 'Versus', Icon: icon(Swords), match: (p: string) => p.startsWith('/versus') || p.startsWith('/friends') || p.startsWith('/@') || p.startsWith('/u/') },
   { path: '/feed', label: 'Play', Icon: () => <Orb size={40} />, match: (p: string) => p === '/feed' || p.startsWith('/play/'), orb: true },
   { path: '/library', label: 'Games', Icon: icon(LayoutGrid), match: (p: string) => p.startsWith('/library') || p.startsWith('/game/') },
   { path: '/you', label: 'You', Icon: icon(CircleUser), match: (p: string) => ['/you', '/progress', '/settings', '/shop', '/about', '/privacy'].some((x) => p.startsWith(x)) },
@@ -48,7 +54,16 @@ export default function App() {
   const overlayOpen = usePlayUi((s) => s.overlays > 0);
   const feedSeen = useRef(false);
   const equipped = useEconomy((s) => s.equipped);
-  const liveInvite = useVersusLive((s) => !!s.queue || !!s.found);
+  const searching = useVersusLive((s) => !!s.queue || !!s.found);
+  const socialPending = useSocial((s) => pendingCount(s) > 0);
+  const liveInvite = searching || socialPending;
+
+  // Sign in (device key) and stay connected to the lobby, so friend challenges arrive on any screen.
+  useEffect(() => {
+    if (!VERSUS_ENABLED) return;
+    void ensureRegistered().then((me) => me && useSocial.getState().refresh());
+    return useVersusLive.getState().retain();
+  }, []);
 
   // Reflect settings globally (CSS + audio).
   useEffect(() => {
@@ -126,6 +141,10 @@ export default function App() {
   else if (path === '/library') page = <Library />;
   else if (path === '/you' || path === '/progress') page = <You />;
   else if (path.startsWith('/versus')) page = <Versus path={path} />;
+  else if (path === '/friends') page = <Friends />;
+  else if (path === '/admin') page = <Admin />;
+  else if (path.startsWith('/@') && path.length > 2) page = <Profile handle={decodeURIComponent(path.slice(2))} />;
+  else if (matchPath('/u/:handle', path)) page = <Profile handle={matchPath('/u/:handle', path)!.handle} />;
   else if (path === '/settings') page = <Settings />;
   else if (path === '/about') page = <About />;
   else if (path === '/shop') page = <Shop />;
@@ -177,6 +196,7 @@ export default function App() {
           <PlayOverlay gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} />
         </ErrorBoundary>
       )}
+      {!play && !overlayOpen && <InviteToast />}
       <StorageNotice />
       <AdHost />
       <BreakReminder paused={!!play || overlayOpen} />
@@ -184,6 +204,44 @@ export default function App() {
       <div className="sr-only" aria-live="polite" role="status">
         {announce}
       </div>
+    </div>
+  );
+}
+
+/** A friend's live challenge, shown on top of any screen (never during a game). */
+function InviteToast() {
+  const inv = useSocial((s) => s.toasts[s.toasts.length - 1]);
+  useEffect(() => {
+    if (!inv) return;
+    audioEngine.uiPlay();
+    // Challenges expire; drop the toast after a while (it stays listed in Friends).
+    const t = window.setTimeout(() => useSocial.setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== inv.id) })), 60_000);
+    return () => window.clearTimeout(t);
+  }, [inv]);
+  if (!inv) return null;
+  const game = inv.gameId ? GAMES_BY_ID[inv.gameId]?.manifest.title : null;
+  const skin = SKINS.find((k) => k.id === inv.from.skin) ?? SKINS[0];
+  return (
+    <div className="invite-toast" role="alertdialog" aria-label={`@${inv.from.handle} challenged you`}>
+      <Orb size={40} skin={skin} />
+      <span className="item-body">
+        <span className="item-title">
+          <span className="handle">@{inv.from.handle}</span> challenged you
+        </span>
+        <small>1v1 · {game ?? 'any game'} · 60 seconds</small>
+      </span>
+      <button
+        className="btn btn-sm btn-primary"
+        onClick={() => {
+          void answerInvite(inv, true);
+          navigate(`/versus/m/${inv.code}`);
+        }}
+      >
+        Play
+      </button>
+      <button className="icon-btn" aria-label="Decline" onClick={() => void answerInvite(inv, false)}>
+        ✕
+      </button>
     </div>
   );
 }

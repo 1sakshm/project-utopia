@@ -4,10 +4,13 @@
 //   POST /rooms            Create a private duel / party room → { code }
 //   GET  /ghost/:gameId    A recorded run to race against when nobody is online
 //   GET  /leaders          Top ratings
+//   …plus the social/admin API in api.ts (profiles, @handles, friends, challenges)
 import { Lobby } from './lobby';
 import { Match } from './match';
 import { isRoomCode, PARTY_MAX, type RoomKind } from '../../src/platform/versus/protocol';
 import { lobbyOf, matchOf, PID_RE, type Env } from './util';
+import { handleApi } from './api';
+import { authenticate } from './db';
 
 export { Lobby, Match };
 
@@ -21,8 +24,9 @@ function corsHeaders(env: Env, req: Request): Record<string, string> {
   const origin = req.headers.get('Origin');
   return {
     'Access-Control-Allow-Origin': originAllowed(env, origin) && origin ? origin : '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Player-Id, X-Player-Key',
+    'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
 }
@@ -62,6 +66,7 @@ export default {
       }
       const kind: RoomKind = body.kind === 'party' ? 'party' : 'duel';
       if (!body.pid || !PID_RE.test(body.pid)) return json(env, req, { error: 'Bad player id' }, 400);
+      if (!(await authenticate(env, body.pid, req.headers.get('X-Player-Key') ?? ''))) return json(env, req, { error: 'Not signed in' }, 401);
       const gameId = typeof body.gameId === 'string' && /^[a-z0-9-]{2,40}$/.test(body.gameId) ? body.gameId : null;
       const code = await lobbyOf(env).newCode();
       await matchOf(env, code).init({
@@ -89,6 +94,9 @@ export default {
     }
 
     if (path === '/leaders' && req.method === 'GET') return json(env, req, { leaders: await lobbyOf(env).leaders() });
+
+    const api = await handleApi(req, env, path, url, (data, status) => json(env, req, data, status));
+    if (api) return api;
 
     return json(env, req, { error: 'Not found' }, 404);
   },

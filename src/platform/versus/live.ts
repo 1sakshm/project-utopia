@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { useProfile } from '../profile';
 import { useSettings } from '../settings';
 import { track } from '../analytics';
+import { ensureRegistered, onInvite, useSocial } from '../social';
 import { VERSUS_WS, randomPoolGame } from './config';
 import type { LeaderRow, LobbyIn, LobbyOut, MatchSummary, Record_ } from './protocol';
 
@@ -41,13 +42,19 @@ function send(m: LobbyIn) {
 
 function hello() {
   const p = useProfile.getState();
-  send({ t: 'hello', pid: p.id, name: p.name });
+  send({ t: 'hello', pid: p.id, key: p.key, name: p.name });
 }
 
-function connect() {
-  if (!VERSUS_WS || ws) return;
+let connecting = false;
+async function connect() {
+  if (!VERSUS_WS || ws || connecting) return;
   window.clearTimeout(retryTimer);
   useVersusLive.setState({ status: 'connecting' });
+  connecting = true;
+  // The lobby only talks to signed-in players: make sure this device is registered first.
+  await ensureRegistered();
+  connecting = false;
+  if (ws || !needed()) return;
   const sock = new WebSocket(`${VERSUS_WS}/lobby`);
   ws = sock;
   sock.onopen = () => {
@@ -81,6 +88,18 @@ function connect() {
       case 'queued':
         set((s) => ({ queue: s.queue ? { ...s.queue, waiting: m.waiting } : s.queue }));
         break;
+      case 'invite':
+        onInvite(m.invite);
+        break;
+      case 'social':
+        void useSocial.getState().refresh();
+        break;
+      case 'error':
+        if (m.auth) {
+          // Our registration is missing or stale: sign in again, then reconnect.
+          void ensureRegistered(true).then(() => useVersusLive.getState().reconnect());
+        }
+        break;
       case 'matched': {
         const q = useVersusLive.getState().queue;
         track({ name: 'versus', action: 'matched', wait_ms: q ? Date.now() - q.since : 0 });
@@ -94,7 +113,7 @@ function connect() {
     if (ws === sock) ws = null;
     if (needed()) {
       useVersusLive.setState({ status: 'offline' });
-      retryTimer = window.setTimeout(connect, backoff);
+      retryTimer = window.setTimeout(() => void connect(), backoff);
       backoff = Math.min(15_000, backoff * 2);
     } else useVersusLive.setState({ status: 'idle' });
   };
@@ -120,7 +139,7 @@ export const useVersusLive = create<LiveState>((set, get) => ({
   retain: () => {
     refs++;
     window.clearTimeout(closeTimer);
-    connect();
+    void connect();
     let released = false;
     return () => {
       if (released) return;
@@ -133,7 +152,7 @@ export const useVersusLive = create<LiveState>((set, get) => ({
     set({ queue: { gameId, since: Date.now(), waiting: 0 }, found: null });
     track({ name: 'versus', action: 'queue', game_id: gameId ?? 'any' });
     if (ws?.readyState === WebSocket.OPEN) send({ t: 'queue', gameId, fallback: randomPoolGame(), relaxed: useSettings.getState().timing !== 'standard' });
-    else connect();
+    else void connect();
   },
   cancelQueue: () => {
     if (!get().queue) return;
@@ -144,11 +163,8 @@ export const useVersusLive = create<LiveState>((set, get) => ({
   reconnect: () => {
     backoff = 1000;
     disconnect();
-    connect();
+    void connect();
   },
 }));
 
-// A new display name is announced right away.
-useProfile.subscribe((p, prev) => {
-  if (p.name !== prev.name) hello();
-});
+

@@ -55,6 +55,10 @@ export interface VersusPlay {
   onLeave: () => void;
   /** Opponent strip shown under the HUD. */
   hud?: ReactNode;
+  /** Above the game's HUD (the round clock). */
+  top?: ReactNode;
+  /** Replaces the pause button (opponent card). Versus rounds run on a shared clock, so there's no pause. */
+  topRight?: ReactNode;
   /** Card shown after this player finishes (waiting for others / final standings). */
   result?: ReactNode;
 }
@@ -477,10 +481,14 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
         </button>
         {(phase === 'playing' || phase === 'paused' || phase === 'countdown' || phase === 'versus-wait') && (
           <div className="hud">
+            {versus?.top}
             {phase !== 'versus-wait' && <Hud hud={hud} showScore={showScore} />}
             {versus?.hud}
           </div>
         )}
+        {versus ? (
+          versus.topRight ?? <span style={{ width: 44 }} />
+        ) : (
         <button
           className="icon-btn"
           onClick={() => (phase === 'paused' ? resume() : pause())}
@@ -489,6 +497,7 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
         >
           {phase === 'paused' ? <IconPlay /> : <IconPause />}
         </button>
+        )}
       </div>
 
       {caption && (

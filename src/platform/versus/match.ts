@@ -5,8 +5,10 @@ import { useProfile } from '../profile';
 import { useSettings } from '../settings';
 import { useProgress } from '../progress';
 import { track } from '../analytics';
+import { ensureRegistered } from '../social';
+import { useEconomy } from '../economy';
 import { VERSUS_HTTP, VERSUS_WS } from './config';
-import { COUNTDOWN_MS, ROUND_CAP_MS, type Emote, type GhostRun, type MatchIn, type MatchOut, type PlayerView, type RoomView } from './protocol';
+import { COUNTDOWN_MS, ROUND_MS, type Emote, type GhostRun, type MatchIn, type MatchOut, type PlayerView, type RoomView } from './protocol';
 
 export type MatchStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -65,7 +67,7 @@ export const useMatch = create<MatchState>((set, get) => ({
     get().leave();
     set({ code, status: 'connecting', error: null, room: null, you: null, emotes: [], ghost: false });
     attempts = 0;
-    open(code, !!opts?.spectate);
+    void ensureRegistered().then(() => useMatch.getState().code === code && open(code, !!opts?.spectate));
     track({ name: 'versus', action: opts?.spectate ? 'watch' : 'join' });
   },
 
@@ -113,8 +115,8 @@ export const useMatch = create<MatchState>((set, get) => ({
     const p = useProfile.getState();
     ghostRun = run;
     const now = Date.now();
-    const me: PlayerView = { pid: p.id, name: p.name, rating: 0, ready: true, connected: true, score: 0, level: 0, done: false, relaxed: useSettings.getState().timing !== 'standard' };
-    const ghost: PlayerView = { pid: GHOST_PID, name: run.name, rating: 0, ready: true, connected: true, score: 0, level: 0, done: false, relaxed: false };
+    const me: PlayerView = { pid: p.id, name: p.name, handle: p.handle ?? undefined, skin: useEconomy.getState().equipped.skin, rating: 0, ready: true, connected: true, score: 0, level: 0, done: false, relaxed: useSettings.getState().timing !== 'standard' };
+    const ghost: PlayerView = { pid: GHOST_PID, name: run.name, skin: 'skin-classic', rating: 0, ready: true, connected: true, score: 0, level: 0, done: false, relaxed: false };
     set({
       code: 'GHOST',
       status: 'open',
@@ -133,7 +135,7 @@ export const useMatch = create<MatchState>((set, get) => ({
         seed: (Math.random() * 2 ** 31) | 0,
         state: 'countdown',
         startAt: now + COUNTDOWN_MS,
-        endsAt: now + COUNTDOWN_MS + ROUND_CAP_MS,
+        endsAt: now + COUNTDOWN_MS + ROUND_MS,
         max: 2,
         players: [me, ghost],
         spectators: 0,
@@ -173,7 +175,7 @@ function open(code: string, spectate: boolean) {
   sock.onopen = () => {
     attempts = 0;
     const p = useProfile.getState();
-    sock.send(JSON.stringify({ t: 'hello', pid: p.id, name: p.name, spectate, relaxed: useSettings.getState().timing !== 'standard' } satisfies MatchIn));
+    sock.send(JSON.stringify({ t: 'hello', pid: p.id, key: p.key, name: p.name, spectate, relaxed: useSettings.getState().timing !== 'standard' } satisfies MatchIn));
   };
   sock.onmessage = (e) => {
     let m: MatchOut;
@@ -242,10 +244,10 @@ function ghostTick() {
     return;
   }
   if (room.state !== 'playing') return;
-  const t = now - room.startAt;
-  const end = ghostRun.timeline[ghostRun.timeline.length - 1]?.[0] ?? 0;
+  const t = Math.min(now - room.startAt, ROUND_MS);
+  const end = Math.min(ROUND_MS, ghostRun.timeline[ghostRun.timeline.length - 1]?.[0] ?? 0);
   const g = room.players.find((p) => p.pid === GHOST_PID)!;
-  const s = t >= end ? ghostRun.score : ghostScoreAt(t);
+  const s = t >= end ? ghostFinal() : ghostScoreAt(t);
   if (s !== g.score || (t >= end && !g.done)) patchPlayer(GHOST_PID, { score: s, done: t >= end });
   if (now >= room.endsAt) finishGhost();
 }
@@ -262,12 +264,19 @@ function ghostInput(m: MatchIn) {
   }
 }
 
-/** You finished: the ghost's full run is known, so the result is immediate. */
+/** The ghost's score when the one-minute clock runs out (its whole run if it finished sooner). */
+function ghostFinal(): number {
+  if (!ghostRun) return 0;
+  const last = ghostRun.timeline[ghostRun.timeline.length - 1]?.[0] ?? 0;
+  return last <= ROUND_MS ? ghostRun.score : ghostScoreAt(ROUND_MS);
+}
+
+/** You finished: the ghost's run is known, so the result is immediate. */
 function finishGhost() {
   window.clearInterval(ghostTimer);
   const room = useMatch.getState().room;
   if (!room || !ghostRun || room.state === 'done') return;
-  const players = room.players.map((p) => (p.pid === GHOST_PID ? { ...p, score: ghostRun!.score, done: true } : { ...p, done: true }));
+  const players = room.players.map((p) => (p.pid === GHOST_PID ? { ...p, score: ghostFinal(), done: true } : { ...p, done: true }));
   const [a, b] = players;
   for (const p of players) {
     const other = p === a ? b : a;
@@ -281,9 +290,10 @@ function finishGhost() {
 /** Create a private duel or party room. Returns the code. */
 export async function createRoom(kind: 'duel' | 'party', opts: { gameId?: string | null; public?: boolean } = {}): Promise<string> {
   if (!VERSUS_HTTP) throw new Error('Multiplayer isn’t set up on this build.');
+  await ensureRegistered();
   const res = await fetch(`${VERSUS_HTTP}/rooms`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Player-Key': useProfile.getState().key },
     body: JSON.stringify({ kind, pid: useProfile.getState().id, gameId: opts.gameId ?? null, public: !!opts.public }),
   });
   if (!res.ok) throw new Error('Couldn’t create a room. Try again.');

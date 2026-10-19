@@ -11,6 +11,7 @@ import './styles/ui.css';
 import './styles/pages.css';
 import './styles/game.css';
 import './styles/motion.css';
+import './styles/social.css';
 import App from './app/App';
 
 createRoot(document.getElementById('root')!).render(

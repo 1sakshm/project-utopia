@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { IconClose } from './Icons';
 
 /** Accessible bottom sheet (dialog). Esc / backdrop closes. Focus moves in and returns on close. */
@@ -21,7 +22,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
     };
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Portal to <body>: inside a page layer the sheet would sit under the tab bar on phones.
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div
         className="sheet"
@@ -41,6 +43,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
         </header>
         <div className="sheet-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

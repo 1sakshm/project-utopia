@@ -24,13 +24,40 @@ ghost:        nobody around? race a recorded run from another player (or your ow
 
 Both objects use the WebSocket Hibernation API, so idle sockets cost nothing.
 
+## Players database (D1)
+
+Players, @handles, friendships, friend challenges and match history live in **Cloudflare D1** (SQLite):
+
+| Table | What |
+|---|---|
+| `players` | id, unique `@handle`, name, orb skin, rating, W/L/D, matches, created / last seen. Only a SHA-256 of each device's secret key is stored. |
+| `friendships` | one row per pair, `pending` → `accepted` |
+| `invites` | friend challenges (a private duel room code), expire after 10 min |
+| `matches`, `match_players` | every finished versus round |
+
+Browse it in the Cloudflare dashboard (Workers & Pages → D1 → `utopia` → Console), or in the app at **`/admin`**
+(enter the `ADMIN_TOKEN`). Schema: [`migrations/`](./migrations).
+
+**How sign-in works:** each device creates a public id and a secret key. The first request registers the id with
+the key's hash and picks a free `@handle`; after that every request and socket must present the key. No email,
+no password.
+
+## Rounds
+
+Every versus round is **60 seconds** on the server's clock (`ROUND_MS`). Clients show the countdown and the
+opponent's live score; when the clock runs out each client submits its score, and the server closes the round
+1.5 s later with whatever it has.
+
 ## Run locally
 
 ```bash
 cd server
 npm install
+npx wrangler d1 migrations apply utopia --local   # once, and after adding migrations
 npm run dev            # ws://localhost:8787  (no Cloudflare account needed)
 ```
+
+Put `ADMIN_TOKEN=<anything>` in `server/.dev.vars` to use `/admin` locally.
 
 The app's dev build connects to `ws://<your-host>:8787` automatically, so `npm run dev` in the repo root plus this
 is all you need. Open two browser profiles (or a normal + private window) to play yourself.
@@ -39,8 +66,11 @@ is all you need. Open two browser profiles (or a normal + private window) to pla
 
 ```bash
 cd server
-npx wrangler login     # once
-npm run deploy         # prints https://utopia-versus.<your-subdomain>.workers.dev
+npx wrangler login                          # once
+npx wrangler d1 create utopia               # once: paste the database_id into wrangler.toml
+npx wrangler d1 migrations apply utopia --remote
+npx wrangler secret put ADMIN_TOKEN         # once: the password for /admin
+npm run deploy                              # prints https://utopia-versus.<your-subdomain>.workers.dev
 ```
 
 Then build the app with the server's address and deploy it as usual:
@@ -64,5 +94,7 @@ Durable Objects with SQLite storage are available on the Workers **free plan**.
 - **Scores are trusted from the client.** Same-seed play makes cheating harder to hide (everyone has the same
   board) but doesn't prevent it. Next step: send each trial (answer + timestamp) and re-score on the server for
   the games where that's cheap.
-- **Identity is a random device id**, no account. Clearing site data starts a new rating.
-- **Display names are not filtered** beyond length and control characters. Add a word list before a public launch.
+- **Identity is a device key**, no email. Clearing site data (or a new phone) means a new player; account
+  recovery / linking devices is a later step.
+- **Names** are filtered only for length and control characters; **handles** block reserved words and a short
+  obscenity list (`src/platform/versus/handles.ts`). Extend it before a big launch.

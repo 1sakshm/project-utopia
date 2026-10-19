@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { elo, isRoomCode, ROOM_CODE_ALPHABET } from './protocol';
 import { cleanName } from '../profile';
+import { checkHandle, slugHandle } from './handles';
 
 describe('versus protocol', () => {
   it('elo is zero-sum between equal players and favors the underdog', () => {
@@ -22,5 +23,24 @@ describe('versus protocol', () => {
     expect(cleanName('  Swift   Otter ')).toBe('Swift Otter');
     expect(cleanName('a\u0000b\nc')).toBe('abc');
     expect(cleanName('x'.repeat(40))).toHaveLength(20);
+  });
+
+  it('validates @handles', () => {
+    expect(checkHandle('sucksome')).toBeNull();
+    expect(checkHandle('@sucksome')).toBeNull();
+    expect(checkHandle('ben_stone.99')).toBeNull();
+    expect(checkHandle('ab')).toMatch(/least/);
+    expect(checkHandle('9lives')).toMatch(/letter/);
+    expect(checkHandle('has space')).toMatch(/letters/);
+    expect(checkHandle('double__under')).toMatch(/doubled/);
+    expect(checkHandle('trailing_')).toMatch(/trailing/);
+    expect(checkHandle('Admin')).toMatch(/reserved/);
+    expect(checkHandle('x'.repeat(21))).toMatch(/most/);
+  });
+
+  it('suggests handles from names', () => {
+    expect(slugHandle('Swift Otter')).toBe('swiftotter');
+    expect(slugHandle('9 Lives')).toBe('p9lives');
+    expect(slugHandle('!!')).toBe('player');
   });
 });

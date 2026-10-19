@@ -7,6 +7,10 @@ export type RoomState = 'lobby' | 'countdown' | 'playing' | 'done';
 export interface PlayerView {
   pid: string;
   name: string;
+  /** @handle (without the @). */
+  handle?: string;
+  /** Equipped orb skin id, so opponents see your real orb. */
+  skin?: string;
   rating: number;
   ready: boolean;
   connected: boolean;
@@ -56,6 +60,8 @@ export interface MatchSummary {
 
 export interface LeaderRow {
   name: string;
+  handle?: string;
+  skin?: string;
   rating: number;
   w: number;
   l: number;
@@ -76,9 +82,37 @@ export interface GhostRun {
   timeline: Array<[number, number]>;
 }
 
+/** What anyone can see about a player. */
+export interface PublicProfile {
+  handle: string;
+  name: string;
+  skin: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  matches: number;
+  createdAt: number;
+}
+
+export interface FriendView extends PublicProfile {
+  online: boolean;
+  lastSeen: number;
+  since: number;
+}
+
+/** A friend's challenge to a private duel. */
+export interface InviteView {
+  id: string;
+  code: string;
+  gameId: string | null;
+  createdAt: number;
+  from: { handle: string; name: string; skin: string };
+}
+
 // ---------- client → lobby ----------
 export type LobbyIn =
-  | { t: 'hello'; pid: string; name: string }
+  | { t: 'hello'; pid: string; key: string; name: string }
   | { t: 'queue'; gameId: string | null; fallback: string; relaxed: boolean }
   | { t: 'cancel' }
   | { t: 'ping' };
@@ -92,11 +126,15 @@ export type LobbyOut =
   | { t: 'queued'; since: number; waiting: number }
   | { t: 'matched'; code: string; gameId: string }
   | { t: 'pong'; now: number }
-  | { t: 'error'; msg: string };
+  /** A friend challenged you. */
+  | { t: 'invite'; invite: InviteView }
+  /** Something changed in your friends list (request, accept, someone came online): refetch. */
+  | { t: 'social' }
+  | { t: 'error'; msg: string; auth?: boolean };
 
 // ---------- client → match ----------
 export type MatchIn =
-  | { t: 'hello'; pid: string; name: string; spectate?: boolean; relaxed?: boolean }
+  | { t: 'hello'; pid: string; key: string; name: string; spectate?: boolean; relaxed?: boolean }
   | { t: 'ready'; ready: boolean }
   | { t: 'pick'; gameId: string }
   | { t: 'start' }
@@ -124,7 +162,12 @@ export const isRoomCode = (s: string) => new RegExp(`^[${ROOM_CODE_ALPHABET}]{${
 
 /** Countdown before a round starts, and the hard cap on a round (games normally end well before). */
 export const COUNTDOWN_MS = 4000;
-export const ROUND_CAP_MS = 6 * 60_000;
+/** Every versus round is exactly one minute. */
+export const ROUND_MS = 60_000;
+/** Late 'done' messages still count for this long after the clock runs out. */
+export const ROUND_GRACE_MS = 1500;
+/** @deprecated kept for old imports: rounds are now ROUND_MS. */
+export const ROUND_CAP_MS = ROUND_MS;
 export const PARTY_MAX = 8;
 export const START_RATING = 1000;
 

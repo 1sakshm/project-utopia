@@ -13,6 +13,14 @@ class_name = "Lobby"
 name = "MATCH"
 class_name = "Match"
 
+# Players, friends, challenges, match history. Create once with `npx wrangler d1 create utopia`
+# and paste the id below; schema lives in ./migrations.
+[[d1_databases]]
+binding = "DB"
+database_name = "utopia"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Lobby", "Match"]

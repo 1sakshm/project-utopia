@@ -7,17 +7,17 @@ import { useProfile, initials } from '@/platform/profile';
 import { useVersusLive } from '@/platform/versus/live';
 import { useMatch, createRoom, findGhost, secondsUntil } from '@/platform/versus/match';
 import { VERSUS_ENABLED, VERSUS_POOL, ROOM_POOL, randomPoolGame } from '@/platform/versus/config';
-import { EMOTES, EMOTE_LABEL, isRoomCode, type MatchSummary, type PlayerView, type RoomView } from '@/platform/versus/protocol';
+import { EMOTES, EMOTE_LABEL, ROUND_MS, isRoomCode, type MatchSummary, type PlayerView, type RoomView } from '@/platform/versus/protocol';
 import { track } from '@/platform/analytics';
 import { navigate, matchPath } from '../router';
 import { formatScore } from '../components/Common';
 import { Sheet } from '../components/Sheet';
 import PlayOverlay, { type VersusPlay } from '../components/PlayOverlay';
 import { NameSheet } from '../components/NameSheet';
+import { useSocial, pendingCount, challenge as challengeFriend } from '@/platform/social';
 import { Orb } from '../components/Orb';
 import { burst, burstFrom } from '../fx';
 import { audioEngine } from '@/runtime/audio';
-import { useEconomy } from '@/platform/economy';
 import { SKINS, type SkinDef } from '@/platform/shop';
 import { AdSlot } from '../components/AdSlot';
 
@@ -51,6 +51,7 @@ function Unconfigured() {
 function Dashboard() {
   const live = useVersusLive();
   const name = useProfile((s) => s.name);
+  const handle = useProfile((s) => s.handle);
   const [nameOpen, setNameOpen] = useState(false);
   const [game, setGame] = useState<string>('any');
   const [busy, setBusy] = useState<null | 'duel' | 'party' | 'ghost'>(null);
@@ -115,7 +116,10 @@ function Dashboard() {
           <span className="item-title">
             {name} <Pencil size={13} className="dim" aria-hidden />
           </span>
-          <span className="item-sub">{me ? `${me.w}W · ${me.l}L${me.d ? ` · ${me.d}D` : ''}` : 'Unranked'}</span>
+          <span className="item-sub">
+            {handle && <span className="handle">@{handle}</span>}
+            {me ? `${me.w}W · ${me.l}L${me.d ? ` · ${me.d}D` : ''}` : 'Unranked'}
+          </span>
         </span>
         <span className="rating">
           <b className="num">{me?.rating ?? 1000}</b>
@@ -188,6 +192,8 @@ function Dashboard() {
         )}
       </section>
 
+      <FriendsStrip />
+
       <section className="section">
         <div className="section-head">
           <h2>
@@ -216,10 +222,12 @@ function Dashboard() {
           </div>
           <ol className="list">
             {live.leaders.slice(0, 10).map((r, i) => (
-              <li key={`${r.name}-${i}`} className="item lb-row">
+              <li key={`${r.handle ?? r.name}-${i}`} className="item lb-row" onClick={() => r.handle && navigate(`/@${r.handle}`)} style={{ cursor: r.handle ? 'pointer' : undefined }}>
                 <span className="lb-rank num">{i + 1}</span>
+                <Orb size={30} skin={SKINS.find((k) => k.id === r.skin) ?? SKINS[0]} spin={false} />
                 <span className="item-body">
                   <span className="item-title">{r.name}</span>
+                  {r.handle && <span className="item-sub handle">@{r.handle}</span>}
                 </span>
                 <span className="item-end">
                   <span className="num">
@@ -236,6 +244,58 @@ function Dashboard() {
       <AdSlot slot="versus" />
       <NameSheet open={nameOpen} onClose={() => setNameOpen(false)} />
     </div>
+  );
+}
+
+/** Friends at a glance: online first, one tap to challenge; a link to the full Friends page. */
+function FriendsStrip() {
+  const friends = useSocial((s) => s.friends);
+  const pending = useSocial(pendingCount);
+  const [busy, setBusy] = useState(false);
+  const sorted = [...friends].sort((a, b) => Number(b.online) - Number(a.online));
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2>
+          Friends<span className="count">{friends.filter((f) => f.online).length} online</span>
+        </h2>
+        <button className="text-link" onClick={() => navigate('/friends')}>
+          {pending > 0 && <span className="friends-badge">{pending}</span>} All <ChevronRight size={14} />
+        </button>
+      </div>
+      {sorted.length ? (
+        <div className="friend-strip">
+          {sorted.slice(0, 12).map((f) => (
+            <button
+              key={f.handle}
+              className="friend-chip"
+              disabled={busy}
+              title={f.online ? `Challenge @${f.handle}` : `@${f.handle}`}
+              onClick={async () => {
+                if (!f.online) return navigate(`/@${f.handle}`);
+                setBusy(true);
+                try {
+                  navigate(`/versus/m/${await challengeFriend(f.handle)}`);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <span className="ring">
+                <Orb size={42} skin={SKINS.find((k) => k.id === f.skin) ?? SKINS[0]} spin={false} />
+                {f.online && <i className="online-dot" />}
+              </span>
+              <span>{f.name.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button className="panel panel-pad" style={{ width: '100%', textAlign: 'left', border: 'none', color: 'inherit' }} onClick={() => navigate('/friends')}>
+          <span className="item-title">Add friends by @handle</span>
+          <span className="item-sub">Challenge them to a one-minute duel.</span>
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -303,17 +363,8 @@ function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
   );
 }
 
-/** Opponents don't send their skin; give each player a stable one from their id so the VS screen has two orbs. */
-function skinFor(pid: string, mine: string, myId: string): SkinDef {
-  if (pid === myId) return SKINS.find((k) => k.id === mine) ?? SKINS[0];
-  let h = 0;
-  for (const c of pid) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return SKINS[h % SKINS.length];
-}
-
 /** Full-screen "A VS B" slam that plays when a round starts. */
 function VsIntro({ room, you }: { room: RoomView; you: string | null }) {
-  const mySkin = useEconomy((s) => s.equipped.skin);
   const vsRef = useRef<HTMLDivElement>(null);
   const [gone, setGone] = useState(false);
   useEffect(() => {
@@ -333,7 +384,7 @@ function VsIntro({ room, you }: { room: RoomView; you: string | null }) {
   return createPortal(
     <div className="vs-intro" aria-live="assertive" aria-label={`${me?.name} versus ${others.map((o) => o.name).join(', ')}`}>
       <div className="vs-side left">
-        <Orb size={92} skin={skinFor(me.pid, mySkin, you ?? '')} />
+        <Orb size={92} skin={skinOf(me)} />
         <b>{me.name}</b>
         {room.ranked && <small>{me.rating}</small>}
       </div>
@@ -344,7 +395,7 @@ function VsIntro({ room, you }: { room: RoomView; you: string | null }) {
       <div className="vs-side right">
         {room.kind === 'duel' && others[0] ? (
           <>
-            <Orb size={92} skin={skinFor(others[0].pid, mySkin, you ?? '')} />
+            <Orb size={92} skin={skinOf(others[0])} />
             <b>{others[0].name}</b>
             {room.ranked && <small>{others[0].rating}</small>}
           </>
@@ -352,7 +403,7 @@ function VsIntro({ room, you }: { room: RoomView; you: string | null }) {
           <>
             <div className="vs-crowd">
               {others.slice(0, 6).map((o) => (
-                <Orb key={o.pid} size={46} skin={skinFor(o.pid, mySkin, you ?? '')} />
+                <Orb key={o.pid} size={46} skin={skinOf(o)} />
               ))}
             </div>
             <b>{others.length} rivals</b>
@@ -764,56 +815,129 @@ function VersusOverlay({ room, live, me, onDismiss, onLeave }: { room: RoomView;
   const st = useMatch();
   const [now, setNow] = useState(Date.now());
   const sentDone = useRef(false);
+  const last = useRef({ s: 0, l: 0 });
+  // Tick the clock while the round is on.
   useEffect(() => {
-    if (room.state !== 'countdown') return;
+    if (room.state !== 'countdown' && room.state !== 'playing') return;
     const t = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(t);
   }, [room.state]);
-  void now;
 
+  const serverNow = now + st.offset;
   const countdown = room.state === 'countdown' ? secondsUntil(room.startAt, st.offset) || null : null;
   const go = room.state === 'playing' || (room.state === 'countdown' && secondsUntil(room.startAt, st.offset) === 0);
+  const remaining = room.state === 'countdown' ? ROUND_MS : room.state === 'playing' ? Math.max(0, room.endsAt - serverNow) : 0;
+  const timeUp = (room.state === 'playing' && remaining <= 0) || room.state === 'done';
   const others = room.players.filter((p) => p.pid !== me.pid);
+  const rival = room.kind === 'duel' ? others[0] : [...others].sort((a, b) => b.score - a.score)[0];
+
+  // Time's up: lock in whatever this player has scored so far.
+  useEffect(() => {
+    if (!timeUp || sentDone.current || room.state === 'done') return;
+    sentDone.current = true;
+    useMatch.getState().send({ t: 'done', s: last.current.s, l: last.current.l });
+    track({ name: 'versus', action: 'finish', game_id: room.gameId ?? '' });
+  }, [timeUp, room.state, room.gameId]);
 
   const versus: VersusPlay = useMemo(
     () => ({
       seed: room.seed,
       go,
       countdown,
-      ended: room.state === 'done',
+      ended: timeUp,
       onScore: (s, l) => {
+        last.current = { s, l };
         if (!sentDone.current) useMatch.getState().send({ t: 'score', s, l });
       },
       onDone: (sum: SessionSummary) => {
+        if (sentDone.current) return;
         sentDone.current = true;
         useMatch.getState().send({ t: 'done', s: sum.score, l: sum.levelReached });
         track({ name: 'versus', action: 'finish', game_id: room.gameId ?? '' });
       },
       onLeave,
-      hud: room.kind === 'duel' ? <DuelHud me={me} other={others[0]} /> : <PartyHud room={room} me={me.pid} />,
+      top: <RoundClock ms={remaining} />,
+      topRight: rival ? <RivalCard p={rival} rank={room.kind === 'party' ? 'top' : undefined} /> : undefined,
+      hud: room.kind === 'party' ? <PartyHud room={room} me={me.pid} /> : undefined,
       result: <RoundResult room={room} live={live} me={me} onDismiss={onDismiss} />,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [room, live, me, go, countdown],
+    [room, live, me, go, countdown, timeUp, Math.ceil(remaining / 1000)],
   );
 
   return createPortal(<PlayOverlay gameId={room.gameId!} daily={false} versus={versus} />, document.body);
 }
 
-function DuelHud({ me, other }: { me: PlayerView; other?: PlayerView }) {
-  if (!other) return null;
-  const diff = me.score - other.score;
+/** The shared one-minute clock. */
+function RoundClock({ ms }: { ms: number }) {
+  const secs = Math.ceil(ms / 1000);
   return (
-    <div className="vs-hud" aria-label={`${other.name} has ${other.score}`}>
-      <span className="vs-name">{other.name}</span>
-      <span>{formatScore(other.score)}</span>
-      {other.done && <span className="vs-name">done</span>}
-      <span className={`vs-diff ${diff >= 0 ? 'is-ahead' : 'is-behind'}`}>
-        {diff >= 0 ? '+' : '−'}
-        {formatScore(Math.abs(diff))}
-      </span>
+    <div className={`round-clock ${secs <= 10 && ms > 0 ? 'is-low' : ''} ${ms <= 0 ? 'is-out' : ''}`} role="timer" aria-label={`${secs} seconds left`}>
+      <span className="num">{ms <= 0 ? 'Time' : fmtClock(secs)}</span>
+      <i style={{ width: `${(ms / ROUND_MS) * 100}%` }} aria-hidden />
     </div>
   );
+}
+
+/** Opponent card (top right): their orb, name and a score that counts up live. */
+function RivalCard({ p, rank }: { p: PlayerView; rank?: 'top' }) {
+  const shown = useTween(p.score);
+  const prev = useRef(p.score);
+  const [bumps, setBumps] = useState<Array<{ id: number; d: number }>>([]);
+  useEffect(() => {
+    const d = p.score - prev.current;
+    prev.current = p.score;
+    if (d <= 0) return;
+    const id = Date.now() + Math.random();
+    setBumps((b) => [...b.slice(-2), { id, d }]);
+    const t = window.setTimeout(() => setBumps((b) => b.filter((x) => x.id !== id)), 1100);
+    return () => window.clearTimeout(t);
+  }, [p.score]);
+  return (
+    <div className="rival" aria-label={`${p.name}: ${p.score}`} aria-live="off">
+      <Orb size={34} skin={skinOf(p)} />
+      <span className="rival-text">
+        <small>{rank === 'top' ? 'Leader' : p.handle ? `@${p.handle}` : p.name}</small>
+        <b className="num">{formatScore(Math.round(shown))}</b>
+      </span>
+      {p.done && <span className="rival-done">done</span>}
+      {bumps.map((b) => (
+        <span key={b.id} className="rival-bump num">
+          +{formatScore(b.d)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Eases a number toward its target so live scores roll up instead of jumping. */
+function useTween(target: number) {
+  const [v, setV] = useState(target);
+  const cur = useRef(target);
+  useEffect(() => {
+    let raf = 0;
+    const from = cur.current;
+    const t0 = performance.now();
+    const dur = Math.min(700, 200 + Math.abs(target - from) * 4);
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      cur.current = from + (target - from) * (1 - Math.pow(1 - k, 3));
+      setV(cur.current);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return v;
+}
+
+/** A player's real orb skin (sent by the server), falling back to a stable pick from their id. */
+function skinOf(p: PlayerView): SkinDef {
+  const real = p.skin ? SKINS.find((k) => k.id === p.skin) : undefined;
+  if (real) return real;
+  let h = 0;
+  for (const c of p.pid) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return SKINS[h % SKINS.length];
 }
 
 function PartyHud({ room, me }: { room: RoomView; me: string }) {
@@ -860,7 +984,7 @@ function RoundResult({ room, live, me, onDismiss }: { room: RoomView; live: Room
     const waiting = room.players.filter((p) => !p.done && p.pid !== me.pid);
     return (
       <div className="glass-card">
-        <p className="eyebrow">You scored</p>
+        <p className="eyebrow">{room.state === 'playing' && room.endsAt <= Date.now() + 500 ? 'Time’s up · you scored' : 'You scored'}</p>
         <div className="results-score">{formatScore(me.score)}</div>
         <p className="muted">
           Waiting for {waiting.map((p) => p.name).join(', ') || 'the others'}… scores are live.
