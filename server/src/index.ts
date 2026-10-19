@@ -80,6 +80,14 @@ export default {
     const g = path.match(/^\/ghost\/([a-z0-9-]{2,40})$/);
     if (g && req.method === 'GET') return json(env, req, { ghost: await lobbyOf(env).ghost(g[1]) });
 
+    if (path === '/admin/reset' && req.method === 'POST') {
+      const auth = req.headers.get('Authorization') ?? '';
+      if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) return json(env, req, { error: 'Unauthorized' }, 401);
+      const body = (await req.json().catch(() => ({}))) as { what?: string[] };
+      const what = (body.what ?? ['ratings', 'ghosts', 'matches']).filter((w): w is 'ratings' | 'ghosts' | 'matches' => ['ratings', 'ghosts', 'matches'].includes(w));
+      return json(env, req, await lobbyOf(env).adminReset(what));
+    }
+
     if (path === '/leaders' && req.method === 'GET') return json(env, req, { leaders: await lobbyOf(env).leaders() });
 
     return json(env, req, { error: 'Not found' }, 404);

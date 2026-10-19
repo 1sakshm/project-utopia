@@ -289,6 +289,22 @@ export class Lobby extends DurableObject<Env> {
     return this.leadersCache;
   }
 
+  // ---------- RPC: admin ----------
+  /** Wipe ratings, ghosts and the live list (e.g. after test traffic). */
+  async adminReset(what: Array<'ratings' | 'ghosts' | 'matches'>) {
+    const prefixes = { ratings: 'r:', ghosts: 'g:', matches: 'm:' } as const;
+    let removed = 0;
+    for (const w of what) {
+      const keys = [...(await this.ctx.storage.list({ prefix: prefixes[w] })).keys()];
+      for (let i = 0; i < keys.length; i += 128) removed += await this.ctx.storage.delete(keys.slice(i, i + 128));
+      if (w === 'matches') this.matches.clear();
+    }
+    this.leadersCache = null;
+    this.broadcast({ t: 'leaders', leaders: await this.leaders() });
+    this.broadcast({ t: 'matches', matches: this.visibleMatches() });
+    return { removed };
+  }
+
   // ---------- RPC: ghosts ----------
   async addGhost(gameId: string, run: GhostRun) {
     const key = `g:${gameId}`;

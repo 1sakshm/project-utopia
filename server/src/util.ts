@@ -15,6 +15,8 @@ export interface Env {
   LOBBY: DurableObjectNamespace<Lobby>;
   MATCH: DurableObjectNamespace<Match>;
   ALLOWED_ORIGINS: string;
+  /** Secret for /admin/* (set with `wrangler secret put ADMIN_TOKEN`). Admin routes are off without it. */
+  ADMIN_TOKEN?: string;
 }
 
 export const PID_RE = /^[a-z0-9]{8,32}$/i;

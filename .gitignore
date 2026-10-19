@@ -12,3 +12,6 @@ shots
 .vercel
 .env*
 !.env.example
+
+.vercel
+.env*.local
