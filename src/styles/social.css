@@ -350,3 +350,81 @@
 .admin-table a {
   text-decoration: none;
 }
+
+/* ---------- Accounts ---------- */
+.account-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.account-cta-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: var(--accent-text);
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-2);
+}
+.auth-done {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--text);
+}
+.auth-done svg {
+  color: var(--sage);
+  flex: none;
+}
+.google-btn-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 44px;
+}
+.google-btn {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+}
+.error-details {
+  margin: 4px 0 8px;
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+.error-details code {
+  display: block;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--press-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

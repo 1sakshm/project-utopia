@@ -48,14 +48,28 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
 // ---------- sign-in ----------
 let registering: Promise<PublicProfile | null> | null = null;
 
+type AccountInfo = { hasPassword: boolean; google: string | null };
+let onAccount: ((a: AccountInfo) => void) | null = null;
+/** account.ts listens here (avoids an import cycle). */
+export function setAccountListener(fn: (a: AccountInfo) => void) {
+  onAccount = fn;
+}
+
+/** Forget the cached sign-in (after switching to another player on this device). */
+export function resetSession() {
+  registering = null;
+  useSocial.setState({ signedIn: false });
+}
+
 /** Create or verify this device's player on the server; keeps name/handle/skin in sync. Safe to call often. */
 export function ensureRegistered(force = false): Promise<PublicProfile | null> {
   if (!VERSUS_HTTP) return Promise.resolve(null);
   if (registering && !force) return registering;
   const p = useProfile.getState();
   const skin = useEconomy.getState().equipped.skin;
-  registering = api<{ me: PublicProfile }>('POST', '/me/register', { name: p.name, skin })
-    .then(({ me }) => {
+  registering = api<{ me: PublicProfile; account?: AccountInfo }>('POST', '/me/register', { name: p.name, skin })
+    .then(({ me, account }) => {
+      if (account) onAccount?.(account);
       useSocial.setState({ me, signedIn: true });
       useProfile.setState({ handle: me.handle, name: me.name });
       // A local skin change made while offline wins.

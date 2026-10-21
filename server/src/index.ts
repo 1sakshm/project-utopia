@@ -24,7 +24,7 @@ function corsHeaders(env: Env, req: Request): Record<string, string> {
   const origin = req.headers.get('Origin');
   return {
     'Access-Control-Allow-Origin': originAllowed(env, origin) && origin ? origin : '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Player-Id, X-Player-Key',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',

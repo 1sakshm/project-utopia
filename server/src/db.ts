@@ -17,7 +17,16 @@ export interface PlayerRow {
   created_at: number;
   last_seen: number;
   handle_changed_at: number | null;
+  password_hash: string | null;
+  google_sub: string | null;
+  email: string | null;
 }
+
+/** A signed-in request: the player plus how this device's key was issued. */
+export type AuthedPlayer = PlayerRow & { _key: { hash: string; via: string; created: number } };
+
+/** Private account facts, shown only to the owner. */
+export const accountOf = (r: PlayerRow) => ({ hasPassword: !!r.password_hash, google: r.google_sub ? r.email ?? 'linked' : null });
 
 export async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -51,11 +60,75 @@ export function byHandle(env: Env, handle: string) {
 }
 
 /** The player behind (pid, key), or null if the key doesn't match. */
-export async function authenticate(env: Env, pid: string, key: string): Promise<PlayerRow | null> {
+export async function authenticate(env: Env, pid: string, key: string): Promise<AuthedPlayer | null> {
   if (!pid || !key || !KEY_RE.test(key)) return null;
+  const hash = await sha256(key);
+  const k = await env.DB.prepare('SELECT via, created_at, last_used FROM player_keys WHERE key_hash = ? AND player_id = ?')
+    .bind(hash, pid)
+    .first<{ via: string; created_at: number; last_used: number | null }>();
+  if (!k) return null;
   const row = await getPlayer(env, pid);
-  if (!row || row.key_hash !== (await sha256(key))) return null;
-  return row;
+  if (!row) return null;
+  const now = Date.now();
+  if (!k.last_used || now - k.last_used > 3600_000) await env.DB.prepare('UPDATE player_keys SET last_used = ? WHERE key_hash = ?').bind(now, hash).run();
+  return { ...row, _key: { hash, via: k.via, created: k.created_at } };
+}
+
+/** Give a device its own key for a player (login). Returns the plain key — the only time it exists. */
+export async function issueKey(env: Env, playerId: string, via: 'password' | 'google', key: string) {
+  await env.DB.prepare('INSERT INTO player_keys (key_hash, player_id, via, created_at, last_used) VALUES (?, ?, ?, ?, ?)')
+    .bind(await sha256(key), playerId, via, Date.now(), Date.now())
+    .run();
+}
+
+export async function deleteKey(env: Env, hash: string) {
+  await env.DB.prepare('DELETE FROM player_keys WHERE key_hash = ?').bind(hash).run();
+}
+
+export function byGoogle(env: Env, sub: string) {
+  return env.DB.prepare('SELECT * FROM players WHERE google_sub = ?').bind(sub).first<PlayerRow>();
+}
+
+// ---------- brute-force guard ----------
+const FAIL_WINDOW_MS = 15 * 60_000;
+const FAIL_LIMIT = 10;
+
+export async function loginLocked(env: Env, handle: string): Promise<boolean> {
+  const r = await env.DB.prepare('SELECT count, since FROM login_failures WHERE handle = ?').bind(handle).first<{ count: number; since: number }>();
+  return !!r && r.count >= FAIL_LIMIT && Date.now() - r.since < FAIL_WINDOW_MS;
+}
+
+export async function noteLoginFailure(env: Env, handle: string) {
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO login_failures (handle, count, since) VALUES (?1, 1, ?2)
+     ON CONFLICT (handle) DO UPDATE SET count = CASE WHEN ?2 - since > ${FAIL_WINDOW_MS} THEN 1 ELSE count + 1 END,
+                                        since = CASE WHEN ?2 - since > ${FAIL_WINDOW_MS} THEN ?2 ELSE since END`,
+  )
+    .bind(handle, now)
+    .run();
+}
+
+export async function clearLoginFailures(env: Env, handle: string) {
+  await env.DB.prepare('DELETE FROM login_failures WHERE handle = ?').bind(handle).run();
+}
+
+// ---------- cloud saves ----------
+export const SAVE_MAX_BYTES = 1_500_000;
+
+export function getSave(env: Env, playerId: string) {
+  return env.DB.prepare('SELECT data, version, updated_at FROM saves WHERE player_id = ?').bind(playerId).first<{ data: string; version: number; updated_at: number }>();
+}
+
+/** Write a save if the caller saw the latest version. Returns the new version, or null on a conflict. */
+export async function putSave(env: Env, playerId: string, data: string, baseVersion: number): Promise<number | null> {
+  const now = Date.now();
+  if (baseVersion === 0) {
+    const r = await env.DB.prepare('INSERT INTO saves (player_id, data, version, updated_at) VALUES (?, ?, 1, ?) ON CONFLICT (player_id) DO NOTHING').bind(playerId, data, now).run();
+    return r.meta.changes ? 1 : null;
+  }
+  const r = await env.DB.prepare('UPDATE saves SET data = ?, version = version + 1, updated_at = ? WHERE player_id = ? AND version = ?').bind(data, now, playerId, baseVersion).run();
+  return r.meta.changes ? baseVersion + 1 : null;
 }
 
 /** First visit creates the player (claiming the id with the key) and picks a free @handle. Later visits verify. */
@@ -64,7 +137,8 @@ export async function register(env: Env, o: { pid: string; key: string; name: st
   const existing = await getPlayer(env, o.pid);
   const hash = await sha256(o.key);
   if (existing) {
-    if (existing.key_hash !== hash) return { error: 'This player id belongs to someone else.' };
+    const k = await env.DB.prepare('SELECT 1 AS ok FROM player_keys WHERE key_hash = ? AND player_id = ?').bind(hash, o.pid).first();
+    if (!k) return { error: 'This player id belongs to someone else.' };
     await env.DB.prepare('UPDATE players SET last_seen = ? WHERE id = ?').bind(now, o.pid).run();
     return { row: { ...existing, last_seen: now } };
   }
@@ -75,15 +149,19 @@ export async function register(env: Env, o: { pid: string; key: string; name: st
     const handle = i === 0 ? base : `${base.slice(0, 15)}${Math.floor(10 + Math.random() * (i < 6 ? 990 : 99990))}`;
     if (checkHandle(handle)) continue;
     try {
-      await env.DB.prepare('INSERT INTO players (id, key_hash, handle, name, skin, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(o.pid, hash, handle, name, skin, now, now)
-        .run();
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO players (id, key_hash, handle, name, skin, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(o.pid, hash, handle, name, skin, now, now),
+        env.DB.prepare("INSERT INTO player_keys (key_hash, player_id, via, created_at, last_used) VALUES (?, ?, 'device', ?, ?)").bind(hash, o.pid, now, now),
+      ]);
       return { row: (await getPlayer(env, o.pid))! };
     } catch (e) {
       if (!String(e).includes('UNIQUE')) throw e;
       // handle taken (or a racing registration of the same id): try again
       const again = await getPlayer(env, o.pid);
-      if (again) return again.key_hash === hash ? { row: again } : { error: 'This player id belongs to someone else.' };
+      if (again) {
+        const k = await env.DB.prepare('SELECT 1 AS ok FROM player_keys WHERE key_hash = ? AND player_id = ?').bind(hash, o.pid).first();
+        return k ? { row: again } : { error: 'This player id belongs to someone else.' };
+      }
     }
   }
   return { error: 'Couldn’t pick a handle. Try again.' };

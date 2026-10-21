@@ -20,6 +20,7 @@ import { SKINS, THEMES } from '@/platform/shop';
 import { useVersusLive } from '@/platform/versus/live';
 import { VERSUS_ENABLED } from '@/platform/versus/config';
 import { answerInvite, ensureRegistered, pendingCount, useSocial } from '@/platform/social';
+import { startSync } from '@/platform/account';
 import { GAME_BY_ID as GAMES_BY_ID } from '@/games/registry';
 
 const Library = lazy(() => import('./pages/Library'));
@@ -62,6 +63,7 @@ export default function App() {
   useEffect(() => {
     if (!VERSUS_ENABLED) return;
     void ensureRegistered().then((me) => me && useSocial.getState().refresh());
+    startSync();
     return useVersusLive.getState().retain();
   }, []);
 

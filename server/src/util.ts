@@ -19,6 +19,8 @@ export interface Env {
   DB: D1Database;
   /** Secret for /admin/* (set with `wrangler secret put ADMIN_TOKEN`). Admin routes are off without it. */
   ADMIN_TOKEN?: string;
+  /** Google OAuth web client id(s), comma-separated. Google sign-in is off without it. */
+  GOOGLE_CLIENT_ID?: string;
 }
 
 export const PID_RE = /^[a-z0-9]{8,32}$/i;

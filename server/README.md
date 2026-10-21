@@ -34,13 +34,33 @@ Players, @handles, friendships, friend challenges and match history live in **Cl
 | `friendships` | one row per pair, `pending` → `accepted` |
 | `invites` | friend challenges (a private duel room code), expire after 10 min |
 | `matches`, `match_players` | every finished versus round |
+| `player_keys` | one row per signed-in device (hash of its key, how it signed in) |
+| `saves` | each account's cloud save (JSON + version) |
+| `login_failures` | brute-force guard for password logins |
 
 Browse it in the Cloudflare dashboard (Workers & Pages → D1 → `utopia` → Console), or in the app at **`/admin`**
 (enter the `ADMIN_TOKEN`). Schema: [`migrations/`](./migrations).
 
-**How sign-in works:** each device creates a public id and a secret key. The first request registers the id with
-the key's hash and picks a free `@handle`; after that every request and socket must present the key. No email,
-no password.
+**How sign-in works**
+
+- Every device starts as a **guest**: it creates a public id and a secret key; the first request registers them and
+  picks a free `@handle`. Each request/socket presents the key (only its SHA-256 is stored, in `player_keys`).
+- **Create account** (`/auth/register`): the guest player gets a password (PBKDF2-SHA256, 100k rounds, salted) and
+  can change its @handle at the same time. Same player, so rating, friends and progress stay.
+- **Log in** on another device (`/auth/login`, `@handle` + password): that device gets its *own* key for the
+  account. 10 wrong tries locks the ID for 15 minutes.
+- **Google** (optional): link it to an account; afterwards "Continue with Google" logs in without the ID/password.
+  Forgot the password? Sign in with Google, then set a new one (allowed for 30 min without the old password).
+- **Cloud save** (`/me/save`): progress, rewards and settings as one versioned JSON document. A device that didn't
+  change anything takes the cloud copy; if both changed, they merge (bests/unlocks never go backwards, history is
+  combined). Logging in on a device with guest progress merges it into the account.
+- Changing the password signs out other password-logged-in devices; **Log out** forgets just that device.
+
+**Turning on Google:** create an OAuth *Web application* client in Google Cloud Console → APIs & Services →
+Credentials, add every site origin under *Authorized JavaScript origins* (e.g. `https://www.playutopia.tech`,
+`https://playutopia.tech`, `https://playutopia.pages.dev`, `https://project-utopia-zeta.vercel.app`,
+`http://localhost:5173`), then put the client id in `GOOGLE_CLIENT_ID` (wrangler.toml) and `VITE_GOOGLE_CLIENT_ID`
+(the app's build env) and redeploy both.
 
 ## Rounds
 
@@ -94,7 +114,6 @@ Durable Objects with SQLite storage are available on the Workers **free plan**.
 - **Scores are trusted from the client.** Same-seed play makes cheating harder to hide (everyone has the same
   board) but doesn't prevent it. Next step: send each trial (answer + timestamp) and re-score on the server for
   the games where that's cheap.
-- **Identity is a device key**, no email. Clearing site data (or a new phone) means a new player; account
-  recovery / linking devices is a later step.
+- **Guests** who never create an account lose their progress if they clear site data. Accounts don't.
 - **Names** are filtered only for length and control characters; **handles** block reserved words and a short
   obscenity list (`src/platform/versus/handles.ts`). Extend it before a big launch.
