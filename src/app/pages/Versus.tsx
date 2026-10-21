@@ -350,6 +350,7 @@ function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
         {waiting > 1 ? ` · ${waiting} searching` : ''}
         {gap !== undefined && (gap === null ? ' · any rating' : ` · rating ±${gap}`)}
       </p>
+      <p className="fine">{secs < 5 ? 'If nobody turns up in 5 seconds, a bot will play you.' : 'Bringing in a bot…'}</p>
       <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
         <button
           className="btn btn-danger"
@@ -491,9 +492,9 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
     if (room?.state === 'done') setLastDone(room);
   }, [room]);
 
-  // Ranked quick matches ready up automatically: the countdown starts once both players are in.
+  // Quick matches (ranked, or against a bot) ready up automatically: the countdown starts once both players are in.
   useEffect(() => {
-    if (!room || !me || !room.ranked || room.state !== 'lobby' || me.ready || autoReadied.current === room.round) return;
+    if (!room || !me || !(room.ranked || isBotDuel(room)) || room.state !== 'lobby' || me.ready || autoReadied.current === room.round) return;
     if (room.round > 0) return; // after a rematch, the player readies themselves
     autoReadied.current = room.round;
     st.send({ t: 'ready', ready: true });
@@ -539,7 +540,8 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
   const showOverlay = !!me && !!g && !!shownRoom && !!shownMe && (inRound || dismissedRound !== shownRoom.round);
   const connected = room.players.filter((p) => p.connected).length;
   const friendly = room.mode === 'friendly';
-  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : friendly ? 'Friendly duel' : 'Duel') : friendly ? 'Friendly party' : 'Party';
+  const botDuel = isBotDuel(room);
+  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : botDuel ? 'Duel vs bot' : friendly ? 'Friendly duel' : 'Duel') : friendly ? 'Friendly party' : 'Party';
 
   return (
     <div className="page">
@@ -552,7 +554,7 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
             <span className="item-title">{g.title}</span>
             <span className="item-sub">{g.hook}</span>
           </span>
-          {isHost && !room.ranked && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
+          {isHost && !room.ranked && !botDuel && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
             <button className="btn btn-sm" onClick={() => setGameOpen(true)}>
               Change
             </button>
@@ -576,6 +578,10 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           )}
         </div>
         <Standings room={room} you={st.you} />
+        {botDuel && <p className="fine" style={{ marginTop: 8 }}>No one else was searching, so a bot stepped in. It plays at about your level. Bot rounds don’t change your rating.</p>}
+        {room.kind === 'party' && room.botFill && room.state === 'lobby' && room.players.length < room.max && (
+          <p className="fine" style={{ marginTop: 8 }}>Empty seats fill with bots shortly. Friends who join take a bot’s seat.</p>
+        )}
         {room.players.length < 2 && room.state === 'lobby' && !room.ranked && (
           <button className="btn btn-block" style={{ marginTop: 10 }} onClick={() => setShareOpen(true)}>
             <Link2 size={16} /> Invite someone · code <b className="code">{room.code}</b>
@@ -623,8 +629,8 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           </button>
         )}
         {!watching && (room.state === 'lobby' || room.state === 'done') && room.kind === 'party' && isHost && (
-          <button className="btn btn-primary btn-lg btn-block" disabled={connected < 2 || !g} onClick={() => st.send({ t: 'start' })}>
-            {connected < 2 ? 'Waiting for players…' : `Start · ${connected} players`}
+          <button className="btn btn-primary btn-lg btn-block" disabled={(connected < 2 && !room.botFill) || !g} onClick={() => st.send({ t: 'start' })}>
+            {connected < 2 ? (room.botFill ? 'Start now with bots' : 'Waiting for players…') : `Start · ${connected} players`}
           </button>
         )}
         {!watching && room.state === 'lobby' && room.kind === 'party' && !isHost && <p className="fine center">The host starts the round.</p>}
@@ -633,7 +639,7 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
             <RefreshCw size={16} /> Rematch
           </button>
         )}
-        {isHost && !room.ranked && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
+        {isHost && !room.ranked && !botDuel && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
           <label className="toggle-line">
             <span>
               Friendly scoring
@@ -649,6 +655,15 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
               <small>Anyone can find and join from Live now.</small>
             </span>
             <input type="checkbox" className="switch" checked={room.public} onChange={(e) => st.send({ t: 'settings', public: e.target.checked })} />
+          </label>
+        )}
+        {isHost && room.kind === 'party' && (room.state === 'lobby' || room.state === 'done') && (
+          <label className="toggle-line">
+            <span>
+              Fill empty seats with bots
+              <small>Bots join after about 15 seconds and play at the group’s level.</small>
+            </span>
+            <input type="checkbox" className="switch" checked={!!room.botFill} onChange={(e) => st.send({ t: 'settings', bots: e.target.checked })} />
           </label>
         )}
         <button className="btn btn-ghost btn-block" onClick={() => navigate('/versus')}>
@@ -723,6 +738,8 @@ function RoomTop({ title, code, onShare, reconnecting }: { title: string; code: 
   );
 }
 
+const isBotDuel = (room: RoomView) => room.kind === 'duel' && room.players.some((p) => p.bot);
+
 function Standings({ room, you, compact = false }: { room: RoomView; you: string | null; compact?: boolean }) {
   const done = room.state === 'done';
   const live = room.state === 'playing' || room.state === 'countdown';
@@ -740,6 +757,7 @@ function Standings({ room, you, compact = false }: { room: RoomView; you: string
               {p.name}
               {p.pid === you && <span className="dim"> (you)</span>}
               {p.pid === room.host && room.kind === 'party' && <Crown size={12} className="dim" aria-label="Host" />}
+              {p.bot && <span className="tag bot-tag">bot</span>}
             </span>
             <span className="item-sub">
               {!p.connected ? 'Disconnected' : live ? (p.done ? 'Finished' : `Level ${p.level || 1}`) : done ? (p.delta !== undefined ? `${p.delta >= 0 ? '+' : ''}${p.delta} rating` : `Level ${p.level}`) : p.ready ? 'Ready' : 'Not ready'}
@@ -932,7 +950,7 @@ function RivalCard({ p, rank, friendly = false }: { p: PlayerView; rank?: 'top';
     <div className="rival" aria-label={`${p.name}: ${p.score}`} aria-live="off">
       <Orb size={34} skin={skinOf(p)} />
       <span className="rival-text">
-        <small>{rank === 'top' ? 'Leader' : p.handle ? `@${p.handle}` : p.name}</small>
+        <small>{rank === 'top' ? 'Leader' : p.bot ? `${p.name} · bot` : p.handle ? `@${p.handle}` : p.name}</small>
         <b className="num">{friendly && p.best !== undefined ? fmtPct(relativeScore(shown, p.best)) : formatScore(Math.round(shown))}</b>
       </span>
       {p.done && <span className="rival-done">done</span>}

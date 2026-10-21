@@ -18,9 +18,11 @@ import {
   type RoomKind,
   type RoomView,
   type ScoreMode,
+  type GhostRun,
 } from '../../src/platform/versus/protocol';
 import { lobbyOf, PID_RE, type Env } from './util';
 import * as db from './db';
+import { botIdentity, botLevel, botRating, botScore, FILL_END_MS, FILL_START_MS, isBot, makeBrain, type BotBrain } from './bots';
 
 interface Att {
   pid: string;
@@ -33,6 +35,8 @@ interface PState extends PlayerView {
   timeline: Array<[number, number]>;
   forfeit: boolean;
   leftAt: number;
+  /** Bots only: how this bot scores this round (made once the humans' bests are known). */
+  brain?: BotBrain;
 }
 
 interface Room extends Omit<RoomView, 'players' | 'spectators' | 'mode'> {
@@ -55,6 +59,8 @@ export interface InitOptions {
   gameId: string | null;
   max: number;
   expect: string[] | null;
+  /** Parties: fill empty seats with bots after a short wait. Default on for parties. */
+  botFill?: boolean;
 }
 
 /** A dropped player gets this long to reconnect mid-round before it counts as a forfeit. */
@@ -64,12 +70,20 @@ const IDLE_MS = 10 * 60_000;
 const SCORE_MIN_INTERVAL = 90;
 const TIMELINE_STEP_MS = 500;
 const SUMMARY_INTERVAL = 1500;
+/** Bots report a new score this often during a round. */
+const BOT_TICK_MS = 700;
 
 export class Match extends DurableObject<Env> {
   private room: Room | null = null;
   private loaded = false;
   private lastSummary = 0;
   private lastSave = 0;
+  /** Ghost runs for this round's game (bots borrow their pacing). */
+  private ghosts: GhostRun[] = [];
+
+  private humans() {
+    return this.room!.players.filter((p) => !isBot(p.pid));
+  }
 
   private async getRoom(): Promise<Room | null> {
     if (!this.loaded) {
@@ -110,11 +124,47 @@ export class Match extends DurableObject<Env> {
       round: 0,
       players: [],
       expect: o.expect,
+      botFill: o.kind === 'party' ? o.botFill !== false : false,
       createdAt: now,
       touchedAt: now,
     };
     await this.save();
-    await this.ctx.storage.setAlarm(now + IDLE_MS);
+    await this.ctx.storage.setAlarm(now + (this.room.botFill ? FILL_START_MS : IDLE_MS));
+  }
+
+  /** Lobby RPC: put bots in this room (quick match with nobody else around). */
+  async addBots(n: number, rating: number) {
+    const r = await this.getRoom();
+    if (!r) return;
+    for (let i = 0; i < n && r.players.length < r.max; i++) this.addBot(rating);
+    await this.save();
+    this.pushRoom();
+  }
+
+  private addBot(rating: number) {
+    const r = this.room!;
+    const b = botIdentity();
+    if (r.expect) r.expect.push(b.pid);
+    r.players.push({
+      pid: b.pid,
+      name: b.name,
+      bot: true,
+      rating: botRating(rating),
+      ready: true,
+      connected: true,
+      score: 0,
+      level: 0,
+      done: false,
+      relaxed: false,
+      timeline: [],
+      forfeit: false,
+      leftAt: 0,
+    });
+  }
+
+  private avgHumanRating() {
+    const h = this.humans();
+    return h.length ? h.reduce((n, p) => n + p.rating, 0) / h.length : 1000;
   }
 
   // ---------- sockets ----------
@@ -156,6 +206,7 @@ export class Match extends DurableObject<Env> {
       host: r.host,
       gameId: r.gameId,
       mode: r.mode,
+      botFill: r.botFill,
       seed: r.seed,
       state: r.state,
       startAt: r.startAt,
@@ -163,7 +214,7 @@ export class Match extends DurableObject<Env> {
       max: r.max,
       round: r.round,
       spectators,
-      players: r.players.map(({ timeline: _t, forfeit: _f, leftAt: _l, ...p }) => p),
+      players: r.players.map(({ timeline: _t, forfeit: _f, leftAt: _l, brain: _b, ...p }) => p),
     };
   }
 
@@ -244,7 +295,8 @@ export class Match extends DurableObject<Env> {
         } else if (!spectate) {
           const allowed = !r.expect || r.expect.includes(msg.pid);
           if (r.state !== 'lobby' && r.state !== 'done') spectate = true;
-          else if (r.players.length >= r.max || !allowed) spectate = true;
+          else if (!allowed) spectate = true;
+          else if (r.players.length >= r.max && !this.evictBot()) spectate = true;
           else {
             r.players.push({
               pid: msg.pid,
@@ -262,7 +314,7 @@ export class Match extends DurableObject<Env> {
               forfeit: false,
               leftAt: 0,
             });
-            if (!r.players.some((p) => p.pid === r.host)) r.host = msg.pid;
+            if (!r.players.some((p) => p.pid === r.host) || isBot(r.host)) r.host = msg.pid;
           }
         }
         ws.serializeAttachment({ ...a, pid: msg.pid, spectate } satisfies Att);
@@ -296,7 +348,7 @@ export class Match extends DurableObject<Env> {
         if (typeof msg.gameId !== 'string' || !/^[a-z0-9-]{2,40}$/.test(msg.gameId)) return;
         if (r.state === 'done') this.resetRound();
         r.gameId = msg.gameId;
-        for (const p of r.players) p.ready = false;
+        for (const p of r.players) p.ready = isBot(p.pid);
         await this.save();
         this.pushRoom();
         return;
@@ -309,11 +361,18 @@ export class Match extends DurableObject<Env> {
           r.public = msg.public;
           changed = true;
         }
+        if (typeof msg.bots === 'boolean' && r.kind === 'party' && msg.bots !== !!r.botFill) {
+          r.botFill = msg.bots;
+          // Turning bots off clears the bot seats (between rounds only).
+          if (!msg.bots && (r.state === 'lobby' || r.state === 'done')) r.players = r.players.filter((p) => !isBot(p.pid));
+          changed = true;
+          await this.schedule();
+        }
         // Scoring can be switched in unranked rooms between rounds; everyone has to ready up again.
         if (isScoreMode(msg.mode) && msg.mode !== r.mode && !r.ranked && (r.state === 'lobby' || r.state === 'done')) {
           if (r.state === 'done') this.resetRound();
           r.mode = msg.mode;
-          for (const p of r.players) p.ready = false;
+          for (const p of r.players) p.ready = isBot(p.pid);
           changed = true;
         }
         if (!changed) return;
@@ -326,7 +385,9 @@ export class Match extends DurableObject<Env> {
         // Parties: the host starts once at least two players are in.
         if (!me || me.pid !== r.host || r.kind !== 'party') return;
         if (r.state === 'done') this.resetRound();
-        if (r.state !== 'lobby' || !r.gameId || r.players.filter((p) => p.connected).length < 2) return;
+        if (r.state !== 'lobby' || !r.gameId) return;
+        await this.fillBots(true); // starting now: empty seats the bots would have taken are filled first
+        if (r.players.filter((p) => p.connected).length < 2) return;
         await this.startCountdown();
         return;
       }
@@ -412,8 +473,10 @@ export class Match extends DurableObject<Env> {
     if (!p) return;
     if (r.state === 'lobby' || r.state === 'done') {
       r.players = r.players.filter((x) => x !== p);
-      if (r.host === pid && r.players[0]) r.host = r.players[0].pid;
-      if (r.state === 'done') for (const x of r.players) x.ready = false;
+      // Bots never stay on their own, and never host.
+      if (!this.humans().length) r.players = [];
+      if (r.host === pid && this.humans()[0]) r.host = this.humans()[0].pid;
+      if (r.state === 'done') for (const x of r.players) x.ready = isBot(x.pid);
     } else {
       p.connected = false;
       p.leftAt = Date.now();
@@ -439,10 +502,11 @@ export class Match extends DurableObject<Env> {
     r.startAt = 0;
     r.endsAt = 0;
     for (const p of r.players) {
-      p.ready = false;
+      p.ready = isBot(p.pid);
       p.score = 0;
       p.level = 0;
       p.done = false;
+      delete p.brain;
       p.timeline = [];
       p.forfeit = false;
       delete p.place;
@@ -475,6 +539,15 @@ export class Match extends DurableObject<Env> {
       p.timeline = [];
       delete p.best;
       delete p.rel;
+      delete p.brain;
+    }
+    this.ghosts = [];
+    if (r.gameId && r.players.some((p) => isBot(p.pid))) {
+      try {
+        this.ghosts = (await lobbyOf(this.env).ghosts(r.gameId)) as GhostRun[];
+      } catch {
+        /* bots fall back to pacing */
+      }
     }
     await this.save();
     await this.schedule();
@@ -483,16 +556,24 @@ export class Match extends DurableObject<Env> {
 
   private allDone(): boolean {
     const r = this.room!;
-    return r.players.length > 0 && r.players.every((p) => p.done);
+    const h = this.humans();
+    return h.length > 0 && h.every((p) => p.done);
   }
 
   private async finish() {
     const r = this.room!;
     if (r.state === 'done') return;
     r.state = 'done';
+    const now = Date.now();
     for (const p of r.players) {
+      // Bots play out the full minute even if everyone else finished early.
+      if (isBot(p.pid) && !p.forfeit) {
+        this.ensureBrain(p, now);
+        p.score = botScore(p.brain!, ROUND_MS, ROUND_MS, p.score, this.liveHuman());
+        p.level = botLevel(p.brain!, ROUND_MS, ROUND_MS);
+      }
       if (!p.done) p.done = true; // time cap reached: last reported score stands
-      p.ready = false;
+      p.ready = isBot(p.pid);
     }
     if (r.mode === 'friendly') for (const p of r.players) p.rel = relativeScore(p.score, p.best);
     // Places: forfeits last, then by score (friendly: percent of own best); equal values share a place.
@@ -509,9 +590,10 @@ export class Match extends DurableObject<Env> {
         gameId: r.gameId,
         kind: r.kind,
         // Friendly rounds never touch ratings.
-        ranked: r.ranked && r.mode === 'standard' && r.players.length === 2,
+        // Rounds with bots are never ranked; bots aren't players in the database.
+        ranked: r.ranked && r.mode === 'standard' && r.players.length === 2 && !r.players.some((p) => isBot(p.pid)),
         mode: r.mode,
-        players: r.players.map((p) => ({ pid: p.pid, score: p.score, place: p.place!, forfeit: p.forfeit, rel: p.rel })),
+        players: this.humans().map((p) => ({ pid: p.pid, score: p.score, place: p.place!, forfeit: p.forfeit, rel: p.rel })),
       });
       for (const p of r.players) {
         if (deltas[p.pid] === undefined) continue;
@@ -524,7 +606,7 @@ export class Match extends DurableObject<Env> {
     }
     if (r.gameId) {
       for (const p of r.players) {
-        if (p.forfeit || p.timeline.length < 3) continue;
+        if (p.forfeit || p.timeline.length < 3 || isBot(p.pid)) continue;
         lobby.addGhost(r.gameId, { name: p.name, score: p.score, timeline: p.timeline }).catch(() => {});
       }
     }
@@ -542,7 +624,8 @@ export class Match extends DurableObject<Env> {
     else if (r.state === 'playing') {
       at = r.endsAt + ROUND_GRACE_MS;
       for (const p of r.players) if (!p.connected && !p.done && p.leftAt) at = Math.min(at, p.leftAt + GRACE_MS);
-    }
+      if (r.players.some((p) => isBot(p.pid))) at = Math.min(at, now + BOT_TICK_MS);
+    } else if (r.state === 'lobby' && this.fillDue() !== null) at = Math.min(at, this.fillDue()!);
     await this.ctx.storage.setAlarm(Math.max(now + 50, at));
   }
 
@@ -558,6 +641,8 @@ export class Match extends DurableObject<Env> {
       return;
     }
     if (r.state === 'playing') {
+      this.tickBots(now);
+      await this.save(false);
       let changed = false;
       for (const p of r.players) {
         if (!p.connected && !p.done && p.leftAt && now - p.leftAt >= GRACE_MS) {
@@ -577,6 +662,11 @@ export class Match extends DurableObject<Env> {
       await this.schedule();
       return;
     }
+    if (r.state === 'lobby' && this.fillDue() !== null) {
+      if (now >= r.createdAt + FILL_START_MS - 20) await this.fillBots(false);
+      await this.schedule();
+      return;
+    }
     // lobby / done: clean up rooms nobody is using.
     if (this.open().length === 0 && now - r.touchedAt >= IDLE_MS - 1000) {
       await lobbyOf(this.env)
@@ -587,5 +677,75 @@ export class Match extends DurableObject<Env> {
       return;
     }
     await this.ctx.storage.setAlarm(now + IDLE_MS);
+  }
+
+  // ---------- bots ----------
+  /** Highest live human score (pacing bots follow it when nothing else is known). */
+  private liveHuman() {
+    return Math.max(0, ...this.humans().map((p) => p.score));
+  }
+
+  private ensureBrain(p: PState, now: number) {
+    if (p.brain) return;
+    const r = this.room!;
+    const bests = this.humans().map((h) => h.best ?? 0).filter((b) => b > 0);
+    // Wait briefly for the humans' first score report (it carries their personal best).
+    if (!bests.length && now - r.startAt < 3000 && r.state === 'playing') return;
+    p.brain = makeBrain({ best: bests.length ? bests.reduce((a, b) => a + b, 0) / bests.length : undefined, rating: p.rating, ghosts: this.ghosts });
+  }
+
+  private tickBots(now: number) {
+    const r = this.room!;
+    const t = Math.max(0, now - r.startAt);
+    const live = this.liveHuman();
+    for (const p of r.players) {
+      if (!isBot(p.pid) || p.done) continue;
+      this.ensureBrain(p, now);
+      if (!p.brain) continue;
+      const s = botScore(p.brain, Math.min(t, ROUND_MS), ROUND_MS, p.score, live);
+      const l = botLevel(p.brain, Math.min(t, ROUND_MS), ROUND_MS);
+      if (s === p.score && l === p.level) continue;
+      p.score = s;
+      p.level = l;
+      p.timeline.push([t, s]);
+      const out = JSON.stringify({ t: 'score', pid: p.pid, s, l } satisfies MatchOut);
+      for (const w of this.open()) w.send(out);
+    }
+    void this.pushSummary(false);
+  }
+
+  /** When the next bot should take a seat in this party, or null if no filling is pending. */
+  private fillDue(): number | null {
+    const r = this.room!;
+    if (r.kind !== 'party' || !r.botFill || r.state !== 'lobby' || r.players.length >= r.max || !this.humans().length) return null;
+    const start = r.createdAt + FILL_START_MS;
+    const now = Date.now();
+    if (now < start) return start;
+    // Spread the remaining seats so the room is full by FILL_END_MS (or right away if that's already past).
+    const left = Math.max(0, r.createdAt + FILL_END_MS - now);
+    return now + Math.max(400, Math.floor(left / (r.max - r.players.length)));
+  }
+
+  /** Seat one bot (or every free seat with `all`). */
+  private async fillBots(all: boolean) {
+    const r = this.room!;
+    if (r.kind !== 'party' || !r.botFill) return;
+    const rating = this.avgHumanRating();
+    while (r.players.length < r.max) {
+      this.addBot(rating);
+      if (!all) break;
+    }
+    await this.save();
+    this.pushRoom();
+  }
+
+  /** A human wants a seat in a full room: a bot gives up its seat (between rounds only). */
+  private evictBot(): boolean {
+    const r = this.room!;
+    if (r.state !== 'lobby' && r.state !== 'done') return false;
+    const i = r.players.map((p) => isBot(p.pid)).lastIndexOf(true);
+    if (i < 0) return false;
+    r.players.splice(i, 1);
+    return true;
   }
 }

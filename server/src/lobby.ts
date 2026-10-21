@@ -14,6 +14,7 @@ import {
 import { cleanName, matchOf, PID_RE, type Env } from './util';
 import * as db from './db';
 import { pairQueue, pickOpponent, ratingWindow, type Seeker } from './matchmaking';
+import { BOT_QUEUE_MS } from './bots';
 
 interface Att {
   pid: string;
@@ -26,7 +27,7 @@ const DONE_VISIBLE_MS = 45_000;
 const GHOSTS_PER_GAME = 12;
 const LEADERS = 20;
 /** While anyone is searching, re-check the queue this often (rating windows widen as people wait). */
-const SWEEP_MS = 2000;
+const SWEEP_MS = 1000;
 
 type Queued = Seeker & { ws: WebSocket; a: Att };
 
@@ -212,6 +213,8 @@ export class Lobby extends DurableObject<Env> {
   async alarm() {
     const now = Date.now();
     for (const [x, y] of pairQueue(this.queued(), now)) await this.pair(x.ws, x.a, y.ws, y.a);
+    // Nobody suitable within BOT_QUEUE_MS: a bot steps in.
+    for (const s of this.queued()) if (now - s.since >= BOT_QUEUE_MS) await this.pairBot(s.ws, s.a);
     const rest = this.queued();
     for (const s of rest) this.sendQueued(s.ws, s.a.queue!.since, rest.length, now);
     if (rest.length) await this.ctx.storage.setAlarm(now + SWEEP_MS);
@@ -241,6 +244,19 @@ export class Lobby extends DurableObject<Env> {
     otherWs.serializeAttachment(other);
     this.send(ws, { t: 'matched', code, gameId });
     this.send(otherWs, { t: 'matched', code, gameId });
+  }
+
+  /** A practice duel against a bot, rated close to the player (the round itself is never ranked). */
+  private async pairBot(ws: WebSocket, me: Att) {
+    const q = me.queue!;
+    const gameId = q.gameId ?? q.fallback;
+    const code = await this.newCode();
+    const room = matchOf(this.env, code);
+    await room.init({ code, kind: 'duel', ranked: false, mode: 'standard', public: true, host: me.pid, gameId, max: 2, expect: [me.pid] });
+    await room.addBots(1, q.rating);
+    delete me.queue;
+    ws.serializeAttachment(me);
+    this.send(ws, { t: 'matched', code, gameId });
   }
 
   // ---------- RPC: rooms & live list ----------
@@ -359,6 +375,10 @@ export class Lobby extends DurableObject<Env> {
     const list = (await this.ctx.storage.get<GhostRun[]>(key)) ?? [];
     list.push({ name: run.name, score: run.score, timeline: run.timeline.slice(0, 400) });
     await this.ctx.storage.put(key, list.slice(-GHOSTS_PER_GAME));
+  }
+
+  async ghosts(gameId: string): Promise<GhostRun[]> {
+    return (await this.ctx.storage.get<GhostRun[]>(`g:${gameId}`)) ?? [];
   }
 
   async ghost(gameId: string): Promise<GhostRun | null> {

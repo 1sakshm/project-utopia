@@ -35,6 +35,8 @@ export interface PlayerView {
   best?: number;
   /** Friendly rooms: this round's score as a percent of `best` (see relativeScore). */
   rel?: number;
+  /** A stand-in opponent run by the server (never rated). Always shown as a bot. */
+  bot?: boolean;
 }
 
 export interface RoomView {
@@ -56,6 +58,8 @@ export interface RoomView {
   spectators: number;
   /** Increments on every rematch so clients can tell rounds apart. */
   round: number;
+  /** Parties: empty seats fill with bots after a short wait. */
+  botFill?: boolean;
 }
 
 /** Compact summary the lobby shows in "Live now". */
@@ -177,7 +181,7 @@ export type MatchIn =
   | { t: 'emote'; e: Emote }
   | { t: 'rematch' }
   /** Host only. `mode` can be changed in unranked rooms between rounds. */
-  | { t: 'settings'; public?: boolean; mode?: ScoreMode }
+  | { t: 'settings'; public?: boolean; mode?: ScoreMode; bots?: boolean }
   | { t: 'leave' };
 
 // ---------- match → client ----------

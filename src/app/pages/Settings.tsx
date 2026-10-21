@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useSettings, prefersReducedMotion, type Settings as S } from '@/platform/settings';
 import { useProgress } from '@/platform/progress';
 import { historyCsv, shareOrDownload } from '@/platform/exportCsv';
+import { isSignedUp, logout, useAccount } from '@/platform/account';
+import { useProfile } from '@/platform/profile';
 import { useEconomy, AD_DAILY_CAP } from '@/platform/economy';
 import { ADS_ENABLED } from '@/platform/adsConfig';
 import { track } from '@/platform/analytics';
@@ -394,6 +396,7 @@ export default function Settings() {
       </Group>
 
       <Group id="data">
+        <AccountRow />
         <Toggle k="analytics" label="Share anonymous usage stats" desc="Helps Saksham see which games people enjoy and come back to. A random ID only: no names, emails, cookies or gameplay details." />
         <ActionRow label="Privacy & terms" desc="What Utopia stores and sends, in plain words">
           <button className="btn" onClick={() => navigate('/privacy')}>
@@ -491,4 +494,44 @@ interface ImportData {
   progress?: Record<string, import('@/platform/progress').GameProgress>;
   economy?: Record<string, unknown>;
   history?: import('@/platform/progress').SessionRecord[];
+}
+
+/** Log out (signed-in accounts), or point guests at creating an account first so nothing is lost. */
+function AccountRow() {
+  const account = useAccount((x) => x.account);
+  const handle = useProfile((x) => x.handle);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!isSignedUp(account)) {
+    return (
+      <ActionRow label="Account" desc="You’re playing as a guest. Create an account to keep your progress and log in on other devices.">
+        <button className="btn" onClick={() => navigate('/you')}>
+          Create account
+        </button>
+      </ActionRow>
+    );
+  }
+  return (
+    <ActionRow label={`Log out${handle ? ` of @${handle}` : ""}`} desc={err ?? "Your progress is saved to your account first. This device then starts fresh as a guest."}>
+      <button
+        className="btn btn-danger"
+        disabled={busy}
+        onClick={async () => {
+          if (!window.confirm('Log out on this device? Your progress is saved to your account; this device will start fresh as a guest.')) return;
+          setBusy(true);
+          setErr(null);
+          try {
+            await logout();
+            navigate('/');
+          } catch (e) {
+            setErr((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? 'Logging out…' : 'Log out'}
+      </button>
+    </ActionRow>
+  );
 }
