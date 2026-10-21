@@ -28,6 +28,11 @@ const GHOSTS_PER_GAME = 12;
 const LEADERS = 20;
 /** While anyone is searching, re-check the queue this often (rating windows widen as people wait). */
 const SWEEP_MS = 1000;
+/** Always-live rooms. */
+const HOUSE_ROOMS = 6;
+/** While anyone is online, keep the always-live rooms awake (re-sent this often, for this long). */
+const HOUSE_WAKE_EVERY_MS = 40_000;
+const HOUSE_AWAKE_MS = 90_000;
 
 type Queued = Seeker & { ws: WebSocket; a: Att };
 
@@ -36,6 +41,7 @@ export class Lobby extends DurableObject<Env> {
   private leadersCache: LeaderRow[] | null = null;
   private loaded = false;
   private broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastWake = 0;
 
   private async load() {
     if (this.loaded) return;
@@ -108,6 +114,7 @@ export class Lobby extends DurableObject<Env> {
         if (!row) return this.send(ws, { t: 'error', msg: 'Not signed in', auth: true });
         const wasOnline = this.isOnline(msg.pid);
         ws.serializeAttachment({ pid: msg.pid, name: row.name } satisfies Att);
+        await this.wakeHouses(false);
         this.send(ws, { t: 'snapshot', online: this.onlineCount(), matches: this.visibleMatches(), leaders: await this.leaders(), me: db.recordOf(row) });
         this.broadcast({ t: 'online', online: this.onlineCount() }, ws);
         if (!wasOnline) await this.pokeFriends(msg.pid);
@@ -217,7 +224,30 @@ export class Lobby extends DurableObject<Env> {
     for (const s of this.queued()) if (now - s.since >= BOT_QUEUE_MS) await this.pairBot(s.ws, s.a);
     const rest = this.queued();
     for (const s of rest) this.sendQueued(s.ws, s.a.queue!.since, rest.length, now);
+    const online = this.open().length > 0;
+    if (online) await this.wakeHouses(false);
     if (rest.length) await this.ctx.storage.setAlarm(now + SWEEP_MS);
+    else if (online) await this.ctx.storage.setAlarm(this.lastWake + HOUSE_WAKE_EVERY_MS);
+  }
+
+  /** Make sure the always-live rooms exist and keep them running while anyone is online. */
+  private async wakeHouses(force: boolean) {
+    const now = Date.now();
+    if (!force && now - this.lastWake < HOUSE_WAKE_EVERY_MS - 1000) return;
+    this.lastWake = now;
+    let codes = (await this.ctx.storage.get<string[]>('house')) ?? [];
+    while (codes.length < HOUSE_ROOMS) {
+      const code = await this.newCode();
+      codes.push(code);
+      await this.ctx.storage.put('house', codes);
+      try {
+        await matchOf(this.env, code).initHouse(code);
+      } catch (e) {
+        console.warn('house init failed', e);
+      }
+    }
+    await Promise.all(codes.map((c) => matchOf(this.env, c).wakeHouse(now + HOUSE_AWAKE_MS).catch((e) => console.warn('wake failed', c, e))));
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(now + HOUSE_WAKE_EVERY_MS);
   }
 
   private async pair(ws: WebSocket, me: Att, otherWs: WebSocket, other: Att) {
@@ -246,13 +276,14 @@ export class Lobby extends DurableObject<Env> {
     this.send(otherWs, { t: 'matched', code, gameId });
   }
 
-  /** A practice duel against a bot, rated close to the player (the round itself is never ranked). */
+  /** Nobody suitable is searching: a stand-in opponent rated close to the player takes the other seat. */
   private async pairBot(ws: WebSocket, me: Att) {
     const q = me.queue!;
     const gameId = q.gameId ?? q.fallback;
     const code = await this.newCode();
     const room = matchOf(this.env, code);
-    await room.init({ code, kind: 'duel', ranked: false, mode: 'standard', public: true, host: me.pid, gameId, max: 2, expect: [me.pid] });
+    // Ranked like any quick match: the player is rated against the opponent's shown rating.
+    await room.init({ code, kind: 'duel', ranked: true, mode: 'standard', public: true, host: me.pid, gameId, max: 2, expect: [me.pid] });
     await room.addBots(1, q.rating);
     delete me.queue;
     ws.serializeAttachment(me);

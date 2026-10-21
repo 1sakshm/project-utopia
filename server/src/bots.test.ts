@@ -1,72 +1,108 @@
 import { describe, expect, it } from 'vitest';
-import { BOT_PREFIX, botIdentity, botLevel, botRating, botScore, isBot, makeBrain, MEDIUM_OF_BEST, ratingScale, shareAt } from './bots';
-import type { GhostRun } from '../../src/platform/versus/protocol';
+import { botIdentity, botRating, MEDIUM_OF_BEST, mulberry, planFor, simulate, stateAt } from './bots';
+import { PID_RE } from './util';
+import { checkHandle } from '../../src/platform/versus/handles';
+import { profileFor, PROFILES, HOUSE_POOL, type GameProfile } from './gameProfiles';
 
-/** Deterministic random numbers for tests. */
-function seq(...xs: number[]) {
-  let i = 0;
-  return () => xs[i++ % xs.length];
-}
 const ROUND = 60_000;
 
-describe('bots', () => {
-  it('are marked as bots and rated close to the player', () => {
-    const b = botIdentity(seq(0.1, 0.5, 0.9));
-    expect(b.pid.startsWith(BOT_PREFIX)).toBe(true);
-    expect(isBot(b.pid)).toBe(true);
-    expect(isBot('abcdefghij0123456789')).toBe(false);
-    expect(b.name).toMatch(/^\w+ \w+$/);
-    for (const r of [0, 0.5, 1]) expect(Math.abs(botRating(1200, () => r) - 1200)).toBeLessThanOrEqual(40);
-  });
-
-  it('aims at a typical run when the player has a best, with luck either side', () => {
-    const lo = makeBrain({ best: 1000, rating: 1000, ghosts: [], rand: () => 0 });
-    const hi = makeBrain({ best: 1000, rating: 1000, ghosts: [], rand: () => 0.999 });
-    expect(lo.target).toBeCloseTo(1000 * MEDIUM_OF_BEST * 0.87, 0);
-    expect(hi.target!).toBeGreaterThan(1000 * MEDIUM_OF_BEST * 1.12);
-    // Medium: the average target sits just under the player's best.
-    const avg = (lo.target! + hi.target!) / 2;
-    expect(avg).toBeLessThan(1000);
-    expect(avg).toBeGreaterThan(800);
-  });
-
-  it('falls back to ghosts scaled by rating, then to pacing', () => {
-    const ghosts: GhostRun[] = [400, 500, 600].map((score) => ({ name: 'x', score, timeline: [[0, 0], [30000, score / 2], [60000, score]] }));
-    const strong = makeBrain({ rating: 1300, ghosts, rand: () => 0.5 });
-    const weak = makeBrain({ rating: 700, ghosts, rand: () => 0.5 });
-    expect(strong.target!).toBeGreaterThan(weak.target!);
-    expect(strong.target!).toBeCloseTo(500 * ratingScale(1300) * 1.0, 0);
-    expect(makeBrain({ rating: 1000, ghosts: [], rand: () => 0.5 }).target).toBeNull();
-  });
-
-  it('scores rise monotonically to the target by the end of the round', () => {
-    const b = makeBrain({ best: 2000, rating: 1000, ghosts: [], rand: () => 0.5 });
-    let s = 0;
-    const r = seq(0.9, 0.1, 0.5, 0.2);
-    for (let t = 0; t <= ROUND; t += 700) {
-      const n = botScore(b, t, ROUND, s, 0, r);
-      expect(n).toBeGreaterThanOrEqual(s);
-      s = n;
+describe('stand-in identity', () => {
+  it('looks like any other player', () => {
+    for (let i = 0; i < 50; i++) {
+      const b = botIdentity();
+      expect(PID_RE.test(b.pid)).toBe(true);
+      expect(b.pid).toHaveLength(20);
+      expect(b.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+      expect(checkHandle(b.handle)).toBeNull();
+      expect(b.skin).toMatch(/^skin-/);
     }
-    s = botScore(b, ROUND, ROUND, s, 0, r);
-    expect(Math.abs(s - b.target!)).toBeLessThanOrEqual(b.step);
-    expect(s % b.step).toBe(0);
-    expect(botLevel(b, ROUND, ROUND)).toBe(b.topLevel);
-    expect(botLevel(b, 0, ROUND)).toBe(1);
+    for (const r of [0, 0.5, 0.999]) expect(Math.abs(botRating(1200, () => r) - 1200)).toBeLessThanOrEqual(45);
+  });
+});
+
+describe('simulated sessions', () => {
+  const shoalLike: GameProfile = { points: 100, perLevel: 0, step: 100, cadenceMs: [5500, 6500, 8000], accuracy: 0.5, levelEveryCorrect: 1, firstScoreMs: 5500 };
+
+  it('scores only in the game’s own increments, at the game’s pace', () => {
+    const plan = simulate(shoalLike, ROUND, 1, 42);
+    expect(plan.events.length).toBeGreaterThan(0);
+    let prevT = 0;
+    let prevS = 0;
+    for (const [t, s] of plan.events) {
+      expect(s % 100).toBe(0);
+      expect(s - prevS === 0 || s - prevS === 100).toBe(true);
+      if (s !== prevS && prevS > 0) expect(t - prevT).toBeGreaterThanOrEqual(5500 * 0.5); // never faster than a trial allows
+      if (s !== prevS) prevT = t;
+      prevS = s;
+    }
+    expect(plan.events[0][0]).toBeGreaterThanOrEqual(5500 * 0.85);
+    expect(plan.final).toBeLessThanOrEqual(1000); // ~9 trials at most in a minute
   });
 
-  it('paces on the human when nothing is known', () => {
-    const b = makeBrain({ rating: 1000, ghosts: [], rand: () => 0.5 }); // luck = 1.0
-    // Human at 300 halfway → projects 600; bot at halfway ~ 600 * 0.5^1.08.
-    const s = botScore(b, ROUND / 2, ROUND, 0, 300, () => 0.9);
-    expect(s).toBeGreaterThan(250);
-    expect(s).toBeLessThan(320);
+  it('is deterministic for a seed and gets better with skill', () => {
+    expect(simulate(shoalLike, ROUND, 1, 7)).toEqual(simulate(shoalLike, ROUND, 1, 7));
+    const avg = (k: number) => {
+      let n = 0;
+      for (let i = 0; i < 200; i++) n += simulate(shoalLike, ROUND, k, i).final;
+      return n / 200;
+    };
+    expect(avg(1.4)).toBeGreaterThan(avg(1));
+    expect(avg(1)).toBeGreaterThan(avg(0.7));
   });
 
-  it('follows a ghost shape', () => {
-    const shape: Array<[number, number]> = [[0, 0], [0.5, 0.8], [1, 1]];
-    expect(shareAt(shape, 0.25)).toBeCloseTo(0.4);
-    expect(shareAt(shape, 0.75)).toBeCloseTo(0.9);
-    expect(shareAt(null, 1)).toBe(1);
+  it('aims at a medium target from the player’s best', () => {
+    const id = Object.keys(PROFILES)[0] ?? 'shoal';
+    const p = profileFor(id);
+    const typical = simulate(p, ROUND, 1, 1).final || 1000;
+    const best = Math.max(200, typical * 1.2);
+    let sum = 0;
+    const N = 60;
+    const r = mulberry(99);
+    for (let i = 0; i < N; i++) sum += planFor({ gameId: id, roundMs: ROUND, best, rating: 1000, ghosts: [], rand: r }).final;
+    const mean = sum / N;
+    expect(mean).toBeGreaterThan(best * MEDIUM_OF_BEST * 0.75);
+    expect(mean).toBeLessThan(best * MEDIUM_OF_BEST * 1.25);
+  });
+
+  it('reports the latest event at any moment', () => {
+    const plan = { events: [[1000, 100, 1], [5000, 200, 2]] as Array<[number, number, number]>, final: 200 };
+    expect(stateAt(plan, 0)).toEqual({ s: 0, l: 1 });
+    expect(stateAt(plan, 1000)).toEqual({ s: 100, l: 1 });
+    expect(stateAt(plan, 59000)).toEqual({ s: 200, l: 2 });
+  });
+
+  it('has a profile for every always-live game', () => {
+    for (const id of HOUSE_POOL) expect(PROFILES[id]).toBeDefined();
+  });
+});
+
+describe('real game profiles', () => {
+  it('Shoal pays in 25s after each ~12 s trial, never in fractions', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      const plan = simulate(profileFor('shoal'), ROUND, 1, seed);
+      let prev = 0;
+      let prevT = -Infinity;
+      for (const [t, s] of plan.events) {
+        expect(s % 25).toBe(0);
+        if (s !== prev) {
+          expect(t).toBeGreaterThanOrEqual(10_000);
+          expect(t - prevT).toBeGreaterThanOrEqual(9_000);
+          expect([25, 100]).toContain(s - prev);
+          prevT = t;
+        }
+        prev = s;
+      }
+    }
+  });
+
+  it('every game scores in its own step and never past the minute', () => {
+    for (const [id, p] of Object.entries(PROFILES)) {
+      const plan = simulate(p, ROUND, 1, 11);
+      for (const [t, s] of plan.events) {
+        expect(t, id).toBeLessThanOrEqual(ROUND);
+        expect(s % p.step, id).toBe(0);
+        expect(s, id).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });

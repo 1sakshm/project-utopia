@@ -3,7 +3,7 @@
 .brand-word {
   font-family: var(--font-display);
   font-weight: 400;
-  font-style: italic;
+  font-style: normal;
   font-size: 1.6rem;
   line-height: 1;
   letter-spacing: -0.01em;

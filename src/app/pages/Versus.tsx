@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronRight, Copy, Crown, Eye, Ghost, Link2, LogOut, Pencil, RefreshCw, Swords, Users } from 'lucide-react';
+import { Check, ChevronRight, Copy, Crown, Eye, Link2, LogOut, Pencil, RefreshCw, Swords, Users } from 'lucide-react';
 import { GAME_BY_ID } from '@/games/registry';
 import type { SessionSummary } from '@/sdk/types';
 import { useProfile, initials } from '@/platform/profile';
 import { useVersusLive } from '@/platform/versus/live';
-import { useMatch, createRoom, findGhost, secondsUntil } from '@/platform/versus/match';
+import { useMatch, createRoom, secondsUntil } from '@/platform/versus/match';
 import { VERSUS_ENABLED, VERSUS_POOL, ROOM_POOL, randomPoolGame } from '@/platform/versus/config';
 import { EMOTES, EMOTE_LABEL, ROUND_MS, isRoomCode, rankValue, relativeScore, type MatchSummary, type PlayerView, type RoomView, type ScoreMode } from '@/platform/versus/protocol';
 import { useProgress } from '@/platform/progress';
@@ -56,7 +56,7 @@ function Dashboard() {
   const handle = useProfile((s) => s.handle);
   const [nameOpen, setNameOpen] = useState(false);
   const [game, setGame] = useState<string>('any');
-  const [busy, setBusy] = useState<null | 'duel' | 'party' | 'ghost'>(null);
+  const [busy, setBusy] = useState<null | 'duel' | 'party'>(null);
   const [err, setErr] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const duelMode = useSocial((s) => s.duelMode);
@@ -83,24 +83,6 @@ function Dashboard() {
     } finally {
       setBusy(null);
     }
-  }
-
-  async function ghost() {
-    setBusy('ghost');
-    setErr(null);
-    const ids = game === 'any' ? [...VERSUS_POOL].sort(() => Math.random() - 0.5) : [game];
-    for (const id of ids.slice(0, 6)) {
-      const run = await findGhost(id);
-      if (run) {
-        live.cancelQueue();
-        useMatch.getState().startGhost(id, run);
-        setBusy(null);
-        navigate('/versus/m/GHOST');
-        return;
-      }
-    }
-    setBusy(null);
-    setErr(game === 'any' ? 'No ghosts recorded yet. Play a few games first.' : 'No ghost for this game yet. Play it once and race yourself.');
   }
 
   const joinCode = code.trim().toUpperCase();
@@ -133,7 +115,7 @@ function Dashboard() {
 
       <section className="section">
         {live.queue ? (
-          <Queueing onGhost={ghost} busy={busy === 'ghost'} />
+          <Queueing />
         ) : (
           <div className="play-box-panel panel">
             <div className="row" style={{ gap: 10, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
@@ -157,15 +139,12 @@ function Dashboard() {
             <p className="fine" style={{ marginTop: 8 }}>
               Ranked 1v1. You both get the same game with the same layout. Highest score wins.
             </p>
-            <div className="split3">
+            <div className="split3" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <button className="btn" onClick={() => void make('duel')} disabled={!!busy}>
                 <Link2 size={16} /> Friend duel
               </button>
               <button className="btn" onClick={() => void make('party')} disabled={!!busy}>
                 <Users size={16} /> Party
-              </button>
-              <button className="btn" onClick={() => void ghost()} disabled={!!busy}>
-                <Ghost size={16} /> Race a ghost
               </button>
             </div>
             <ModePicker mode={duelMode} onChange={setDuelMode} />
@@ -323,7 +302,7 @@ function ConnState() {
   return <span className="chip">Connecting…</span>;
 }
 
-function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
+function Queueing() {
   const q = useVersusLive((s) => s.queue)!;
   const waiting = useVersusLive((s) => s.queue?.waiting ?? 0);
   const gap = useVersusLive((s) => s.queue?.gap);
@@ -350,7 +329,6 @@ function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
         {waiting > 1 ? ` · ${waiting} searching` : ''}
         {gap !== undefined && (gap === null ? ' · any rating' : ` · rating ±${gap}`)}
       </p>
-      <p className="fine">{secs < 5 ? 'If nobody turns up in 5 seconds, a bot will play you.' : 'Bringing in a bot…'}</p>
       <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
         <button
           className="btn btn-danger"
@@ -361,11 +339,6 @@ function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
         >
           Cancel
         </button>
-        {secs >= 12 && (
-          <button className="btn" onClick={onGhost} disabled={busy}>
-            <Ghost size={16} /> Race a ghost
-          </button>
-        )}
       </div>
     </div>
   );
@@ -425,9 +398,9 @@ function VsIntro({ room, you }: { room: RoomView; you: string | null }) {
 
 function LiveRow({ m }: { m: MatchSummary }) {
   const g = m.gameId ? GAME_BY_ID[m.gameId]?.manifest : null;
-  const names = m.kind === 'duel' ? m.players.map((p) => p.name).join(' vs ') : `Party · ${m.players.length}/${m.max}`;
+  const names = m.kind === 'duel' ? m.players.map((p) => p.name).join(' vs ') : `${m.house ? 'Open room' : 'Party'} · ${m.players.length}/${m.max}`;
   const top = [...m.players].sort((a, b) => b.score - a.score);
-  const openJoin = m.kind === 'party' && m.state === 'lobby' && m.players.length < m.max;
+  const openJoin = m.kind === 'party' && (m.state === 'lobby' || !!m.house) && m.players.length < m.max;
   return (
     <button className="item" onClick={() => navigate(openJoin ? `/versus/m/${m.code}` : `/versus/watch/${m.code}`)}>
       <span className="item-thumb" style={{ backgroundImage: m.gameId ? `url(/posters/${m.gameId}.jpg)` : undefined }} aria-hidden />
@@ -492,9 +465,9 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
     if (room?.state === 'done') setLastDone(room);
   }, [room]);
 
-  // Quick matches (ranked, or against a bot) ready up automatically: the countdown starts once both players are in.
+  // Ranked quick matches ready up automatically: the countdown starts once both players are in.
   useEffect(() => {
-    if (!room || !me || !(room.ranked || isBotDuel(room)) || room.state !== 'lobby' || me.ready || autoReadied.current === room.round) return;
+    if (!room || !me || !room.ranked || room.state !== 'lobby' || me.ready || autoReadied.current === room.round) return;
     if (room.round > 0) return; // after a rematch, the player readies themselves
     autoReadied.current = room.round;
     st.send({ t: 'ready', ready: true });
@@ -540,8 +513,7 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
   const showOverlay = !!me && !!g && !!shownRoom && !!shownMe && (inRound || dismissedRound !== shownRoom.round);
   const connected = room.players.filter((p) => p.connected).length;
   const friendly = room.mode === 'friendly';
-  const botDuel = isBotDuel(room);
-  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : botDuel ? 'Duel vs bot' : friendly ? 'Friendly duel' : 'Duel') : friendly ? 'Friendly party' : 'Party';
+  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : friendly ? 'Friendly duel' : 'Duel') : friendly ? 'Friendly party' : room.house ? 'Open room' : 'Party';
 
   return (
     <div className="page">
@@ -554,7 +526,7 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
             <span className="item-title">{g.title}</span>
             <span className="item-sub">{g.hook}</span>
           </span>
-          {isHost && !room.ranked && !botDuel && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
+          {isHost && !room.ranked && !room.house && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
             <button className="btn btn-sm" onClick={() => setGameOpen(true)}>
               Change
             </button>
@@ -578,10 +550,6 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           )}
         </div>
         <Standings room={room} you={st.you} />
-        {botDuel && <p className="fine" style={{ marginTop: 8 }}>No one else was searching, so a bot stepped in. It plays at about your level. Bot rounds don’t change your rating.</p>}
-        {room.kind === 'party' && room.botFill && room.state === 'lobby' && room.players.length < room.max && (
-          <p className="fine" style={{ marginTop: 8 }}>Empty seats fill with bots shortly. Friends who join take a bot’s seat.</p>
-        )}
         {room.players.length < 2 && room.state === 'lobby' && !room.ranked && (
           <button className="btn btn-block" style={{ marginTop: 10 }} onClick={() => setShareOpen(true)}>
             <Link2 size={16} /> Invite someone · code <b className="code">{room.code}</b>
@@ -629,17 +597,20 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           </button>
         )}
         {!watching && (room.state === 'lobby' || room.state === 'done') && room.kind === 'party' && isHost && (
-          <button className="btn btn-primary btn-lg btn-block" disabled={(connected < 2 && !room.botFill) || !g} onClick={() => st.send({ t: 'start' })}>
-            {connected < 2 ? (room.botFill ? 'Start now with bots' : 'Waiting for players…') : `Start · ${connected} players`}
+          <button className="btn btn-primary btn-lg btn-block" disabled={(connected < 2 && !room.autoFill) || !g} onClick={() => st.send({ t: 'start' })}>
+            {connected < 2 ? (room.autoFill ? 'Start now' : 'Waiting for players…') : `Start · ${connected} players`}
           </button>
         )}
-        {!watching && room.state === 'lobby' && room.kind === 'party' && !isHost && <p className="fine center">The host starts the round.</p>}
+        {!watching && room.state === 'lobby' && room.kind === 'party' && !isHost && (
+          <p className="fine center">{room.house ? <NextRoundIn at={room.nextAt} /> : 'The host starts the round.'}</p>
+        )}
+        {room.house && watching && <p className="fine center">You’ll get a seat when the next round starts.</p>}
         {!watching && room.state === 'done' && room.kind === 'duel' && (
           <button className="btn btn-primary btn-lg btn-block" onClick={() => st.send({ t: 'rematch' })}>
             <RefreshCw size={16} /> Rematch
           </button>
         )}
-        {isHost && !room.ranked && !botDuel && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
+        {isHost && !room.ranked && !room.house && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
           <label className="toggle-line">
             <span>
               Friendly scoring
@@ -655,15 +626,6 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
               <small>Anyone can find and join from Live now.</small>
             </span>
             <input type="checkbox" className="switch" checked={room.public} onChange={(e) => st.send({ t: 'settings', public: e.target.checked })} />
-          </label>
-        )}
-        {isHost && room.kind === 'party' && (room.state === 'lobby' || room.state === 'done') && (
-          <label className="toggle-line">
-            <span>
-              Fill empty seats with bots
-              <small>Bots join after about 15 seconds and play at the group’s level.</small>
-            </span>
-            <input type="checkbox" className="switch" checked={!!room.botFill} onChange={(e) => st.send({ t: 'settings', bots: e.target.checked })} />
           </label>
         )}
         <button className="btn btn-ghost btn-block" onClick={() => navigate('/versus')}>
@@ -738,8 +700,6 @@ function RoomTop({ title, code, onShare, reconnecting }: { title: string; code: 
   );
 }
 
-const isBotDuel = (room: RoomView) => room.kind === 'duel' && room.players.some((p) => p.bot);
-
 function Standings({ room, you, compact = false }: { room: RoomView; you: string | null; compact?: boolean }) {
   const done = room.state === 'done';
   const live = room.state === 'playing' || room.state === 'countdown';
@@ -757,7 +717,6 @@ function Standings({ room, you, compact = false }: { room: RoomView; you: string
               {p.name}
               {p.pid === you && <span className="dim"> (you)</span>}
               {p.pid === room.host && room.kind === 'party' && <Crown size={12} className="dim" aria-label="Host" />}
-              {p.bot && <span className="tag bot-tag">bot</span>}
             </span>
             <span className="item-sub">
               {!p.connected ? 'Disconnected' : live ? (p.done ? 'Finished' : `Level ${p.level || 1}`) : done ? (p.delta !== undefined ? `${p.delta >= 0 ? '+' : ''}${p.delta} rating` : `Level ${p.level}`) : p.ready ? 'Ready' : 'Not ready'}
@@ -950,7 +909,7 @@ function RivalCard({ p, rank, friendly = false }: { p: PlayerView; rank?: 'top';
     <div className="rival" aria-label={`${p.name}: ${p.score}`} aria-live="off">
       <Orb size={34} skin={skinOf(p)} />
       <span className="rival-text">
-        <small>{rank === 'top' ? 'Leader' : p.bot ? `${p.name} · bot` : p.handle ? `@${p.handle}` : p.name}</small>
+        <small>{rank === 'top' ? 'Leader' : p.handle ? `@${p.handle}` : p.name}</small>
         <b className="num">{friendly && p.best !== undefined ? fmtPct(relativeScore(shown, p.best)) : formatScore(Math.round(shown))}</b>
       </span>
       {p.done && <span className="rival-done">done</span>}
@@ -993,24 +952,57 @@ function skinOf(p: PlayerView): SkinDef {
   return SKINS[h % SKINS.length];
 }
 
+/** Party standings during a round: one small pill (your place and the leader), tap to see the full table. */
 function PartyHud({ room, me }: { room: RoomView; me: string }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => setOpen(false), 3500);
+    return () => window.clearTimeout(t);
+  }, [open]);
   const sorted = [...room.players].sort((a, b) => rankValue(room.mode, b) - rankValue(room.mode, a));
   const myIdx = sorted.findIndex((p) => p.pid === me);
-  const shown = sorted.slice(0, 3);
-  if (myIdx >= 3) shown.push(sorted[myIdx]);
+  const fmt = (p: PlayerView) => (room.mode === 'friendly' && p.best !== undefined ? fmtPct(relativeScore(p.score, p.best)) : formatScore(p.score));
+  const lead = sorted[0];
   return (
     <div className="vs-board">
-      <ol>
-        {shown.map((p) => (
-          <li key={p.pid} className={p.pid === me ? 'is-me' : ''}>
-            <span>{sorted.indexOf(p) + 1}</span>
-            <span>{p.pid === me ? 'You' : p.name}</span>
-            <span>{room.mode === 'friendly' && p.best !== undefined ? fmtPct(relativeScore(p.score, p.best)) : formatScore(p.score)}</span>
-          </li>
-        ))}
-      </ol>
+      <button className="vs-board-pill" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={`You're ${ordinal(myIdx + 1)} of ${sorted.length}. Show standings`}>
+        <b className="num">
+          {ordinal(myIdx + 1)}
+          <small>/{sorted.length}</small>
+        </b>
+        {lead && lead.pid !== me && (
+          <span className="vs-board-lead">
+            {lead.name.split(' ')[0]} <span className="num">{fmt(lead)}</span>
+          </span>
+        )}
+      </button>
+      {open && (
+        <ol className="vs-board-list">
+          {sorted.map((p, i) => (
+            <li key={p.pid} className={p.pid === me ? 'is-me' : ''}>
+              <span>{i + 1}</span>
+              <span>{p.pid === me ? 'You' : p.name}</span>
+              <span>{fmt(p)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
+}
+
+
+/** Live countdown to the next round in an always-live room. */
+function NextRoundIn({ at }: { at?: number }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 500);
+    return () => window.clearInterval(t);
+  }, []);
+  const offset = useMatch((s) => s.offset);
+  const secs = at ? secondsUntil(at, offset) : 0;
+  return <>{secs > 0 ? `Next round starts in ${secs}s` : 'Starting…'}</>;
 }
 
 function RoundResult({ room, live, me, onDismiss }: { room: RoomView; live: RoomView; me: PlayerView; onDismiss: () => void }) {

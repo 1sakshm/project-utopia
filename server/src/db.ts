@@ -418,7 +418,16 @@ export interface FinishedPlayer {
 /** Store a finished round; for ranked duels apply Elo. Returns rating deltas by pid. */
 export async function recordMatch(
   env: Env,
-  m: { code: string; gameId: string | null; kind: string; ranked: boolean; mode?: 'standard' | 'friendly'; players: FinishedPlayer[] },
+  m: {
+    code: string;
+    gameId: string | null;
+    kind: string;
+    ranked: boolean;
+    mode?: 'standard' | 'friendly';
+    players: FinishedPlayer[];
+    /** A ranked duel's opponent who isn't in the players table: rated against its shown rating. */
+    vs?: { rating: number; place: number; score: number; name: string; handle: string | null };
+  },
 ): Promise<Record<string, number>> {
   const deltas: Record<string, number> = {};
   const rows = new Map<string, PlayerRow>();
@@ -427,7 +436,14 @@ export async function recordMatch(
     if (r) rows.set(p.pid, r);
   }
   const stmts: D1PreparedStatement[] = [];
-  if (m.ranked && m.mode !== 'friendly' && m.players.length === 2 && rows.size === 2) {
+  if (m.ranked && m.mode !== 'friendly' && m.vs && m.players.length === 1 && rows.size === 1) {
+    const a = m.players[0];
+    const ra = rows.get(a.pid)!;
+    const outcome = a.forfeit ? 0 : a.place === m.vs.place ? 0.5 : a.place < m.vs.place ? 1 : 0;
+    deltas[a.pid] = elo(ra.rating, m.vs.rating, outcome);
+    const col = outcome === 1 ? 'wins' : outcome === 0 ? 'losses' : 'draws';
+    stmts.push(env.DB.prepare(`UPDATE players SET rating = MAX(100, rating + ?), ${col} = ${col} + 1 WHERE id = ?`).bind(deltas[a.pid], ra.id));
+  } else if (m.ranked && m.mode !== 'friendly' && m.players.length === 2 && rows.size === 2) {
     const [a, b] = m.players;
     const ra = rows.get(a.pid)!;
     const rb = rows.get(b.pid)!;
@@ -443,7 +459,7 @@ export async function recordMatch(
     }
   }
   for (const p of m.players) if (rows.has(p.pid)) stmts.push(env.DB.prepare('UPDATE players SET matches = matches + 1 WHERE id = ?').bind(p.pid));
-  const summary = m.players.map((p) => ({
+  const summary: Array<Record<string, unknown>> = m.players.map((p) => ({
     handle: rows.get(p.pid)?.handle ?? null,
     score: p.score,
     place: p.place,
@@ -451,6 +467,8 @@ export async function recordMatch(
     forfeit: p.forfeit,
     ...(m.mode === 'friendly' ? { rel: p.rel ?? null } : {}),
   }));
+  // History reads the same whoever the opponent was.
+  if (m.vs) summary.push({ handle: m.vs.handle, score: m.vs.score, place: m.vs.place, delta: null, forfeit: false });
   const ins = await env.DB.prepare('INSERT INTO matches (code, game_id, kind, ranked, finished_at, players) VALUES (?, ?, ?, ?, ?, ?) RETURNING id')
     .bind(m.code, m.gameId, m.kind, m.ranked ? 1 : 0, Date.now(), JSON.stringify(summary))
     .first<{ id: number }>();

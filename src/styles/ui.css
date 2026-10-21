@@ -2073,39 +2073,71 @@ a.item:active {
   background: rgba(154, 74, 60, 0.35);
   color: #ecb3a6;
 }
+/* Party standings in-game: one small pill under the HUD so the game stays visible; tap for the full table. */
 .vs-board {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  justify-content: center;
   margin-top: 2px;
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: rgba(31, 29, 26, 0.82);
-  font-size: 0.74rem;
   font-variant-numeric: tabular-nums;
-  min-width: 150px;
   color: #e9dfcb;
 }
-.vs-board ol {
-  margin: 0;
-  padding: 0;
+.vs-board-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(31, 29, 26, 0.72);
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  line-height: 26px;
+  cursor: pointer;
 }
-.vs-board li {
+.vs-board-pill b small {
+  opacity: 0.55;
+  font-weight: 400;
+}
+.vs-board-lead {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.vs-board-list {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  min-width: 170px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(31, 29, 26, 0.92);
+  font-size: 0.74rem;
+  animation: settle 0.25s var(--ease) both;
+}
+.vs-board-list li {
   display: flex;
   gap: 8px;
   list-style: none;
 }
-.vs-board li span:first-child {
+.vs-board-list li span:first-child {
   width: 12px;
   color: rgba(233, 223, 203, 0.45);
 }
-.vs-board li span:nth-child(2) {
+.vs-board-list li span:nth-child(2) {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vs-board li.is-me {
+.vs-board-list li.is-me {
   color: var(--accent-text);
 }
 
