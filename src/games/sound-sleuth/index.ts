@@ -26,9 +26,14 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: false,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
-      notes: ['No time limit when answering', 'Words are shown after each answer', 'English and Hindi voices'],
+      notes: [
+        'Playable by sound alone: words are spoken, the question and its keys are announced, and each answer is read back with the words',
+        'No time limit when answering',
+        'Words are shown after each answer',
+        'English and Hindi voices',
+      ],
     },
     palette: { bg: '#07131f', bg2: '#10324a', accent: '#8ff0e0', accent2: '#ffb8a8', highlight: '#fff1d6' },
     science: {

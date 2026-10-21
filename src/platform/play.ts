@@ -25,5 +25,15 @@ export const usePlayUi = create<PlayUi>((set) => ({
     return () => set((s) => ({ overlays: Math.max(0, s.overlays - 1) }));
   },
   setOrigin: (r) => set({ originRect: r, openedInApp: true }),
-  say: (text) => set({ announce: text }),
+  say: (text) =>
+    set((s) => {
+      // One polite live region for the whole app. Messages arriving together are joined so a later one can't
+      // replace an earlier one before it's read, and a repeat gets a different trailing space so it's read again.
+      const now = Date.now();
+      const joined = now - lastSay < 400 && s.announce ? `${s.announce.trim()} ${text}` : text;
+      lastSay = now;
+      return { announce: joined === s.announce.trim() ? joined + (s.announce.endsWith(' ') ? ' ' : ' ') : joined };
+    }),
 }));
+
+let lastSay = 0;

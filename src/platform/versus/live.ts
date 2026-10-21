@@ -17,7 +17,8 @@ interface LiveState {
   matches: MatchSummary[];
   leaders: LeaderRow[];
   me: Record_ | null;
-  queue: null | { gameId: string | null; since: number; waiting: number };
+  /** `gap`: rating gap the server currently accepts for your match (null = anyone; widens as you wait). */
+  queue: null | { gameId: string | null; since: number; waiting: number; gap?: number | null };
   /** A quick match was found and hasn't been opened yet. */
   found: null | { code: string; gameId: string };
   retain: () => () => void;
@@ -86,7 +87,7 @@ async function connect() {
         set(m.me ? { leaders: m.leaders, me: m.me } : { leaders: m.leaders });
         break;
       case 'queued':
-        set((s) => ({ queue: s.queue ? { ...s.queue, waiting: m.waiting } : s.queue }));
+        set((s) => ({ queue: s.queue ? { ...s.queue, waiting: m.waiting, gap: m.gap } : s.queue }));
         break;
       case 'invite':
         onInvite(m.invite);

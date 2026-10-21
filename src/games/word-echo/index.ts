@@ -14,6 +14,7 @@ export default defineGame({
       keyboard: [
         ['1–9', 'Tap a card'],
         ['R', 'Hear the list again'],
+        ['T', 'Hear which word is on each key'],
       ],
     },
     abilities: { primary: 'working-memory', secondary: ['phonological-awareness'] },
@@ -25,9 +26,16 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
-      notes: ['With captions on, each word also appears in the orb', 'No time limit when answering', 'English and Hindi voices'],
+      notes: [
+        'Playable by sound alone: the turn prompt reads out which word is on each number key, and T speaks the key list again',
+        'Each correct key says its word and your progress; a miss reads the correct order and lives left',
+        'Backwards rounds are spoken as well as shown',
+        'With captions on, each word also appears in the orb',
+        'No time limit when answering',
+        'English and Hindi voices',
+      ],
     },
     palette: { bg: '#081424', bg2: '#123049', accent: '#7fe7ff', accent2: '#b99cff', highlight: '#fff1c9' },
     science: {

@@ -706,7 +706,21 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       card.alpha = t;
       card.pivot.y = (1 - t) * -8;
     });
-    ctx.announce(`${labels[p.task].replace('…', '')} ${p.word.w}`);
+    ctx.announce(`${labels[p.task].replace('…', '')} ${p.word.w}. Shells: ${shellList(p)}`);
+  }
+
+  /** Numbered shell labels for players who can't see them, e.g. "1 fly, 2 but, 3 ter". */
+  function shellList(p: Prompt) {
+    return p.options.map((o, i) => `${i + 1} ${o}`).join(', ');
+  }
+
+  function sayShells() {
+    if (!prompt || !accepting) return;
+    const left = shells.map((s, i) => ({ s, i })).filter((o) => o.s.state === 'idle');
+    const line = left.map((o) => `${o.i + 1}, ${o.s.label}`).join('. ');
+    speakingPulse = 1;
+    ctx.caption(`Voice: “${line}”`);
+    void ctx.audio.speak(line, { rate: 0.85 });
   }
 
   // ---------------------------------------------------------------- input
@@ -726,10 +740,12 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         step++;
         flyToSlot(sh, target, step - 1);
         if (step >= p.sequence.length) finishPrompt(true);
+        else ctx.announce(`${sh.label}, ${step} of ${p.sequence.length}`);
       } else {
         wrong(sh);
         const next = shells.find((s) => s.state === 'idle' && s.label === want);
         if (next) next.hint = 1;
+        ctx.announce(`Not ${sh.label}.${next ? ` Hint: shell ${shells.indexOf(next) + 1}` : ''}`);
       }
     } else {
       if (sh.label === p.sequence[0]) {
@@ -742,6 +758,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         drawShellBody(sh);
         const right = shells.find((s) => s.label === p.sequence[0]);
         if (right) right.hint = 1;
+        ctx.announce(`Not ${sh.label}.${right ? ` Hint: shell ${shells.indexOf(right) + 1}` : ''}`);
       }
     }
   }
@@ -830,6 +847,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const said = p.task === 'build' ? p.word.w : `${p.word.w}, ${p.target!.w}`;
     ctx.caption(`Voice: “${said}”`);
     void ctx.audio.speak(said, { rate: 0.9 });
+    ctx.announce(`${perfect ? 'Pearl!' : 'Done.'} ${said}. ${pearls} pearls`);
     void celebrate(perfect, slotIdx);
     hud();
   }
@@ -1066,6 +1084,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     Numpad4: pick(3),
     Numpad5: pick(4),
     KeyR: () => sayPrompt(),
+    KeyT: () => sayShells(),
   });
 
   layout();

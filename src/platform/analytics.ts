@@ -24,6 +24,8 @@ export type AnalyticsEvent =
   | { name: 'coming_soon_vote'; feature: string }
   | { name: 'client_error'; where: string; message: string }
   | { name: 'daily_complete'; day: string }
+  | { name: 'starter_complete' }
+  | { name: 'starter_start' }
   | { name: 'star_earned'; game_id: string; stars: number }
   | { name: 'ad_request'; placement: string }
   | { name: 'ad_result'; placement: string; result: string }
@@ -31,7 +33,7 @@ export type AnalyticsEvent =
   | { name: 'shop_purchase'; item: string; price: number }
   | { name: 'boost_used'; kind: string; via: 'inventory' | 'orbs' | 'ad'; game_id: string }
   | { name: 'revive'; game_id: string; via: 'ad' | 'second-wind' | 'declined' }
-  | { name: 'versus'; action: 'queue' | 'matched' | 'cancel' | 'create' | 'join' | 'start' | 'finish' | 'rematch' | 'leave' | 'ghost' | 'watch'; game_id?: string; kind?: string; wait_ms?: number; place?: number }
+  | { name: 'versus'; action: 'queue' | 'matched' | 'cancel' | 'create' | 'join' | 'start' | 'finish' | 'rematch' | 'leave' | 'ghost' | 'watch' | 'async_send' | 'async_reply'; game_id?: string; kind?: string; wait_ms?: number; place?: number }
   | { name: 'ad_impression'; slot: string };
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;

@@ -10,6 +10,10 @@ import { puckGeometry } from './soft';
 
 const SESSION = 5;
 const BEAM_Y = 0.42;
+/** Beam directions (logic.ts): 0 east, 1 south, 2 west, 3 north. */
+const DIR_NAMES = ['east', 'south', 'west', 'north'];
+/** A wedge of rotation r reflects between sides r and r + 1. */
+const FACE_NAMES = ['south-east', 'south-west', 'north-west', 'north-east'];
 const CRYSTAL_COLORS = ['#ffb3d1', '#ffe08a', '#a8ffd8', '#c3b0ff', '#8fe9ff'];
 
 // ---------------------------------------------------------------- view-model
@@ -92,6 +96,62 @@ export default function create(ctx: GameContext): GameInstance {
     });
   }
 
+  // ---- screen-reader descriptions (never in preview)
+  const say = (text: string) => {
+    if (!preview && alive) ctx.announce(text);
+  };
+  const at = (x: number, z: number) => `row ${z + 1}, column ${x + 1}`;
+  const litCount = () => (view.trace ? view.trace.lit.filter(Boolean).length : 0);
+  function beamSummary(): string {
+    const p = view.puzzle;
+    if (!p || !view.trace) return '';
+    const hit = [...view.trace.hitMirrors].sort((a, b) => a - b).map((k) => k + 1);
+    const total = p.chamber.crystals.length;
+    return `${litCount()} of ${total} crystals awake. Beam reaches ${hit.length ? `mirror${hit.length > 1 ? 's' : ''} ${hit.join(', ')}` : 'no mirrors'}.`;
+  }
+  function describeMirror(i: number): string {
+    const p = view.puzzle;
+    if (!p || i < 0 || i >= p.chamber.mirrors.length) return '';
+    const m = p.chamber.mirrors[i];
+    const inBeam = view.trace?.hitMirrors.has(i) ? ', in the beam' : '';
+    return `Mirror ${i + 1} of ${p.chamber.mirrors.length}, ${at(m.x, m.z)}, facing ${FACE_NAMES[view.rot[i]]}${inBeam}.`;
+  }
+  function describeChamber(): string {
+    const p = view.puzzle;
+    if (!p) return '';
+    const ch = p.chamber;
+    const parts: string[] = [`${ch.n} by ${ch.n} grid, row 1 is north.`];
+    parts.push(`Light enters at ${at(ch.source.x, ch.source.z)} heading ${DIR_NAMES[ch.source.dir]}.`);
+    parts.push(
+      `Crystals: ${ch.crystals.map((c, i) => `${at(c.x, c.z)}${view.trace?.lit[i] ? ' awake' : ''}`).join('; ')}.`,
+    );
+    parts.push(`Mirrors: ${ch.mirrors.map((m, i) => `${i + 1} at ${at(m.x, m.z)} facing ${FACE_NAMES[view.rot[i]]}`).join('; ')}.`);
+    const prisms: string[] = [];
+    const blocks: string[] = [];
+    ch.cells.forEach((c, k) => {
+      const x = k % ch.n;
+      const z = Math.floor(k / ch.n);
+      if (c.t === 'prism') prisms.push(at(x, z));
+      else if (c.t === 'block') blocks.push(at(x, z));
+    });
+    if (prisms.length) parts.push(`Prism, splits the beam: ${prisms.join('; ')}.`);
+    if (blocks.length) parts.push(`Stone blocks: ${blocks.join('; ')}.`);
+    parts.push(beamSummary());
+    return parts.join(' ');
+  }
+  let cancelMoveSay: (() => void) | null = null;
+  function sayAfterMove(i: number) {
+    if (preview) return;
+    cancelMoveSay?.();
+    cancelMoveSay = ctx.after(300, () => {
+      cancelMoveSay = null;
+      if (!accepting) return; // the solved announcement takes over
+      const p = view.puzzle;
+      if (!p) return;
+      say(`Mirror ${i + 1} faces ${FACE_NAMES[view.rot[i]]}. ${beamSummary()}`);
+    });
+  }
+
   function retrace(animate: boolean) {
     const p = view.puzzle;
     if (!p) return;
@@ -145,6 +205,7 @@ export default function create(ctx: GameContext): GameInstance {
     }
     view.angle[i] = to;
     retrace(true);
+    sayAfterMove(i);
   }
 
   function tap(i: number) {
@@ -162,6 +223,7 @@ export default function create(ctx: GameContext): GameInstance {
     view.selected = i;
     view.hintPulse = i;
     ctx.caption('Hint: this mirror turns into place');
+    say(`Hint: mirror ${i + 1} turns into place.`);
     ctx.audio.bell(notes(6), { gain: 0.06 });
     const steps = cwCost(view.rot[i], p.best[i]);
     void (async () => {
@@ -179,6 +241,7 @@ export default function create(ctx: GameContext): GameInstance {
     const ms = p.chamber.mirrors;
     if (view.selected < 0) {
       view.selected = 0;
+      say(describeMirror(0));
       return;
     }
     const cur = ms[view.selected];
@@ -203,7 +266,8 @@ export default function create(ctx: GameContext): GameInstance {
     if (best >= 0) {
       view.selected = best;
       ctx.audio.tick();
-    }
+      say(describeMirror(best));
+    } else say(`No mirror that way. ${describeMirror(view.selected)}`);
   }
 
   async function ghost() {
@@ -263,7 +327,7 @@ export default function create(ctx: GameContext): GameInstance {
     ctx.audio.noise({ dur: 1.2, filter: 300, sweepTo: 1600, gain: 0.04 });
     await runPhase('in', 1300);
     if (!alive) return;
-    ctx.announce(`Chamber ${chambers + 1} of ${SESSION}. ${p.chamber.crystals.length} crystals, ${p.chamber.mirrors.length} mirrors.`);
+    say(`Chamber ${chambers + 1} of ${SESSION}. ${p.chamber.crystals.length} crystals, ${p.chamber.mirrors.length} mirrors. ${describeChamber()} Press R to hear the chamber again.`);
     accepting = true;
     const solved = new Promise<void>((res) => (solvedResolve = res));
     if (allLit(view.trace!)) {
@@ -300,7 +364,8 @@ export default function create(ctx: GameContext): GameInstance {
     });
     const starStr = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     ctx.caption(`Chamber awake ${starStr}`);
-    ctx.announce(`All crystals awake. ${stars} of 3 stars.`);
+    cancelMoveSay?.();
+    say(`All crystals awake in ${moves} turns. ${stars} of 3 stars.`);
     ctx.hud.set({ label: `${starStr}  ${moves} turns` });
     await ctx.wait(1600);
     if (!alive) return;
@@ -388,6 +453,7 @@ export default function create(ctx: GameContext): GameInstance {
     KeyE: () => view.selected >= 0 && void rotate(view.selected, 1),
     KeyQ: () => view.selected >= 0 && void rotate(view.selected, -1),
     KeyH: hint,
+    KeyR: () => say(describeChamber()),
   });
 
   const unmount = mountR3F(ctx, <Scene view={view} onTap={(i) => !preview && tap(i)} burstRef={burstRef} />, {

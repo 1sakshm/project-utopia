@@ -8,7 +8,7 @@ import { track } from '../analytics';
 import { ensureRegistered } from '../social';
 import { useEconomy } from '../economy';
 import { VERSUS_HTTP, VERSUS_WS } from './config';
-import { COUNTDOWN_MS, ROUND_MS, type Emote, type GhostRun, type MatchIn, type MatchOut, type PlayerView, type RoomView } from './protocol';
+import { COUNTDOWN_MS, ROUND_MS, type Emote, type GhostRun, type MatchIn, type MatchOut, type PlayerView, type RoomView, type ScoreMode } from './protocol';
 
 export type MatchStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -42,7 +42,7 @@ let retry = 0;
 let attempts = 0;
 let emoteId = 0;
 let lastScoreSent = 0;
-let pendingScore: { s: number; l: number } | null = null;
+let pendingScore: { s: number; l: number; b?: number } | null = null;
 let scoreTimer = 0;
 let ghostTimer = 0;
 let ghostRun: GhostRun | null = null;
@@ -93,12 +93,12 @@ export const useMatch = create<MatchState>((set, get) => ({
     if (get().ghost) return ghostInput(m);
     // Live scores are throttled to ~6/s; the final 'done' always goes out immediately.
     if (m.t === 'score') {
-      pendingScore = { s: m.s, l: m.l };
+      pendingScore = { s: m.s, l: m.l, b: m.b };
       const wait = 160 - (Date.now() - lastScoreSent);
       if (wait <= 0) flushScore();
       else if (!scoreTimer) scoreTimer = window.setTimeout(flushScore, wait);
       // Show my own live score locally right away.
-      patchPlayer(get().you, { score: m.s, level: m.l });
+      patchPlayer(get().you, m.b === undefined ? { score: m.s, level: m.l } : { score: m.s, level: m.l, best: m.b });
       return;
     }
     if (m.t === 'done') {
@@ -190,7 +190,7 @@ function open(code: string, spectate: boolean) {
         useMatch.setState({ room: m.room, you: m.you, offset: m.now - Date.now(), status: 'open' });
         break;
       case 'score':
-        patchPlayer(m.pid, { score: m.s, level: m.l });
+        patchPlayer(m.pid, m.b === undefined ? { score: m.s, level: m.l } : { score: m.s, level: m.l, best: m.b });
         break;
       case 'emote': {
         const ev = { id: ++emoteId, pid: m.pid, e: m.e };
@@ -288,13 +288,13 @@ function finishGhost() {
 // ---------- helpers ----------
 
 /** Create a private duel or party room. Returns the code. */
-export async function createRoom(kind: 'duel' | 'party', opts: { gameId?: string | null; public?: boolean } = {}): Promise<string> {
+export async function createRoom(kind: 'duel' | 'party', opts: { gameId?: string | null; public?: boolean; mode?: ScoreMode } = {}): Promise<string> {
   if (!VERSUS_HTTP) throw new Error('Multiplayer isn’t set up on this build.');
   await ensureRegistered();
   const res = await fetch(`${VERSUS_HTTP}/rooms`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Player-Key': useProfile.getState().key },
-    body: JSON.stringify({ kind, pid: useProfile.getState().id, gameId: opts.gameId ?? null, public: !!opts.public }),
+    body: JSON.stringify({ kind, pid: useProfile.getState().id, gameId: opts.gameId ?? null, public: !!opts.public, mode: opts.mode ?? 'standard' }),
   });
   if (!res.ok) throw new Error('Couldn’t create a room. Try again.');
   const { code } = (await res.json()) as { code: string };

@@ -1,9 +1,10 @@
-// Accounts-without-accounts: sign-in with the device key, @handles, profiles, friends and challenges.
+// Accounts-without-accounts: sign-in with the device key, @handles, profiles, friends and challenges
+// (live 1v1 invites, and async "Beat my score" challenges that replay the exact same game).
 import { create } from 'zustand';
 import { useProfile } from './profile';
 import { useEconomy } from './economy';
 import { VERSUS_HTTP, randomPoolGame } from './versus/config';
-import type { FriendView, InviteView, PublicProfile } from './versus/protocol';
+import type { AsyncChallengeView, FriendView, InviteView, PublicProfile, ScoreMode } from './versus/protocol';
 
 export interface RecentMatch {
   gameId: string | null;
@@ -13,7 +14,7 @@ export interface RecentMatch {
   place: number;
   score: number;
   delta: number | null;
-  players: Array<{ handle: string | null; score: number; place: number }>;
+  players: Array<{ handle: string | null; score: number; place: number; rel?: number | null }>;
 }
 
 export type Relation = 'self' | 'friends' | 'requested' | 'incoming' | null;
@@ -112,6 +113,15 @@ export async function searchPlayers(q: string): Promise<PublicProfile[]> {
 }
 
 // ---------- friends & challenges ----------
+const DUEL_MODE_KEY = 'utopia.duelMode';
+function loadDuelMode(): ScoreMode {
+  try {
+    return localStorage.getItem(DUEL_MODE_KEY) === 'friendly' ? 'friendly' : 'standard';
+  } catch {
+    return 'standard';
+  }
+}
+
 interface SocialState {
   signedIn: boolean;
   me: PublicProfile | null;
@@ -119,6 +129,12 @@ interface SocialState {
   incoming: FriendView[];
   outgoing: FriendView[];
   invites: InviteView[];
+  /** "Beat my score" challenges sent to me / by me (expired, unanswered ones are hidden by the server). */
+  asyncIn: AsyncChallengeView[];
+  asyncOut: AsyncChallengeView[];
+  /** Scoring for the friend duels and parties I create. */
+  duelMode: ScoreMode;
+  setDuelMode: (m: ScoreMode) => void;
   loaded: boolean;
   /** Live challenges waiting for a response (shown as a toast anywhere in the app). */
   toasts: InviteView[];
@@ -132,20 +148,35 @@ export const useSocial = create<SocialState>((set) => ({
   incoming: [],
   outgoing: [],
   invites: [],
+  asyncIn: [],
+  asyncOut: [],
+  duelMode: loadDuelMode(),
+  setDuelMode: (duelMode) => {
+    set({ duelMode });
+    try {
+      localStorage.setItem(DUEL_MODE_KEY, duelMode);
+    } catch {
+      /* storage blocked: keep it for this visit */
+    }
+  },
   loaded: false,
   toasts: [],
   refresh: async () => {
     await ensureRegistered();
-    try {
-      const r = await api<{ friends: FriendView[]; incoming: FriendView[]; outgoing: FriendView[]; invites: InviteView[] }>('GET', '/me/friends');
-      set({ ...r, loaded: true });
-    } catch (e) {
-      console.warn('[social] friends', e);
-    }
+    const friends = api<{ friends: FriendView[]; incoming: FriendView[]; outgoing: FriendView[]; invites: InviteView[] }>('GET', '/me/friends')
+      .then((r) => set({ ...r, loaded: true }))
+      .catch((e) => console.warn('[social] friends', e));
+    const asyncs = api<{ incoming: AsyncChallengeView[]; outgoing: AsyncChallengeView[] }>('GET', '/me/async')
+      .then((r) => set({ asyncIn: r.incoming, asyncOut: r.outgoing }))
+      .catch((e) => console.warn('[social] async challenges', e));
+    await Promise.all([friends, asyncs]);
   },
 }));
 
-export const pendingCount = (s: SocialState) => s.incoming.length + s.invites.length;
+/** Async challenges still waiting for my reply. */
+export const openAsync = (list: AsyncChallengeView[], now = Date.now()) => list.filter((c) => c.replyScore === null && c.expiresAt > now);
+
+export const pendingCount = (s: SocialState) => s.incoming.length + s.invites.length + openAsync(s.asyncIn).length;
 
 export async function addFriend(handle: string): Promise<'pending' | 'accepted'> {
   await ensureRegistered();
@@ -160,17 +191,84 @@ export async function removeFriend(handle: string) {
   void useSocial.getState().refresh();
 }
 
-/** Challenge a friend to a private 1v1. Returns the room code to open. */
-export async function challenge(handle: string, gameId?: string | null): Promise<string> {
+/** Challenge a friend to a private 1v1 (scoring: the chosen duel mode unless given). Returns the room code to open. */
+export async function challenge(handle: string, gameId?: string | null, mode: ScoreMode = useSocial.getState().duelMode): Promise<string> {
   await ensureRegistered();
   // No game chosen: pick one now, so the invite says what you'll play and the room can start right away.
-  const { code } = await api<{ code: string }>('POST', '/me/challenge', { handle, gameId: gameId ?? randomPoolGame() });
+  const { code } = await api<{ code: string }>('POST', '/me/challenge', { handle, gameId: gameId ?? randomPoolGame(), mode });
   return code;
 }
 
 export async function answerInvite(inv: InviteView, accept: boolean) {
   useSocial.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== inv.id), invites: s.invites.filter((t) => t.id !== inv.id) }));
   await api('POST', `/me/invites/${inv.id}`, { action: accept ? 'accept' : 'decline' }).catch(() => {});
+}
+
+// ---------- async challenges ("Beat my score") ----------
+
+/** Send a finished run to a friend: they replay the identical game (same seed and start level) within 24 h. */
+export async function sendAsyncChallenge(handle: string, run: { gameId: string; seed: number; startLevel: number; score: number }): Promise<AsyncChallengeView> {
+  await ensureRegistered();
+  const { challenge: c } = await api<{ challenge: AsyncChallengeView }>('POST', '/me/async', { handle, ...run });
+  useSocial.setState((s) => ({ asyncOut: [c, ...s.asyncOut.filter((x) => x.id !== c.id)] }));
+  return c;
+}
+
+/**
+ * Submit my score for a challenge. Only the first try counts: a repeat returns the stored result
+ * with `first: false`. Throws if the challenge has expired or doesn't exist.
+ */
+export async function replyAsyncChallenge(id: string, score: number): Promise<{ challenge: AsyncChallengeView; first: boolean }> {
+  await ensureRegistered();
+  let c: AsyncChallengeView;
+  let first = true;
+  try {
+    c = (await api<{ challenge: AsyncChallengeView }>('POST', `/me/async/${id}/reply`, { score })).challenge;
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 409) throw e;
+    // Already answered: fetch the stored result.
+    await useSocial.getState().refresh();
+    const known = useSocial.getState().asyncIn.find((x) => x.id === id);
+    if (!known) throw e;
+    c = known;
+    first = false;
+  }
+  useSocial.setState((s) => ({ asyncIn: s.asyncIn.map((x) => (x.id === c.id ? c : x)) }));
+  return { challenge: c, first };
+}
+
+/** Where to play a challenge: the play route with the challenge's seed and start level. */
+export const asyncPlayPath = (c: Pick<AsyncChallengeView, 'id' | 'gameId' | 'seed' | 'startLevel'>) =>
+  `/play/${c.gameId}?ch=${encodeURIComponent(c.id)}&seed=${c.seed >>> 0}&lv=${c.startLevel}`;
+
+/** Read a challenge back from the play route's query string. */
+export function parseAsyncPlay(search: string): { id: string; seed: number; startLevel: number } | null {
+  const q = new URLSearchParams(search);
+  const id = q.get('ch');
+  const seed = Number(q.get('seed'));
+  const startLevel = Number(q.get('lv') ?? 1);
+  if (!id || !/^[0-9a-f-]{36}$/.test(id) || !Number.isInteger(seed) || seed < 0 || !Number.isInteger(startLevel) || startLevel < 1) return null;
+  return { id, seed, startLevel };
+}
+
+/**
+ * The game that's open right now: what it was seeded with, so a finished run can be sent as a challenge,
+ * and (when it is a reply) which challenge it answers. Set by the play overlay when it starts a run.
+ */
+export interface RunInfo {
+  gameId: string;
+  seed: number;
+  startLevel: number;
+  /** Daily runs use the daily variant of some games, so they can't be replayed as a challenge. */
+  daily: boolean;
+  /** Increments every run, so a results screen can tell runs apart. */
+  run: number;
+  replyTo: string | null;
+}
+export const useLastRun = create<{ run: RunInfo | null }>(() => ({ run: null }));
+let runCounter = 0;
+export function noteRun(r: Omit<RunInfo, 'run'>) {
+  useLastRun.setState({ run: { ...r, run: ++runCounter } });
 }
 
 /** Called by the lobby connection. */

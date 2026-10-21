@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, Search, Share2, Swords, UserPlus, X } from 'lucide-react';
+import { Check, Play, Search, Share2, Swords, Trophy, UserPlus, X } from 'lucide-react';
 import { GAME_BY_ID } from '@/games/registry';
 import { SKINS } from '@/platform/shop';
 import { useProfile, profileUrl } from '@/platform/profile';
-import { addFriend, answerInvite, challenge, removeFriend, searchPlayers, useSocial } from '@/platform/social';
-import type { FriendView, InviteView, PublicProfile } from '@/platform/versus/protocol';
+import { addFriend, answerInvite, asyncPlayPath, challenge, removeFriend, searchPlayers, useSocial } from '@/platform/social';
+import { asyncOutcome, type AsyncChallengeView, type FriendView, type InviteView, type PublicProfile } from '@/platform/versus/protocol';
+import { formatScore } from '../components/Common';
 import { VERSUS_ENABLED } from '@/platform/versus/config';
 import { navigate } from '../router';
 import { BackButton } from '../components/Editorial';
@@ -18,6 +19,11 @@ const ago = (t: number) => {
   const h = Math.round(m / 60);
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 };
+const left = (t: number) => {
+  const m = Math.max(0, Math.round((t - Date.now()) / 60000));
+  return m < 60 ? `${m}m left` : `${Math.round(m / 60)}h left`;
+};
+const gameTitle = (id: string) => GAME_BY_ID[id]?.manifest.title ?? id;
 
 export default function Friends() {
   const s = useSocial();
@@ -69,6 +75,10 @@ export default function Friends() {
   s.incoming.forEach((f) => known.set(f.handle.toLowerCase(), 'incoming'));
   s.outgoing.forEach((f) => known.set(f.handle.toLowerCase(), 'outgoing'));
   const friends = [...s.friends].sort((a, b) => Number(b.online) - Number(a.online) || b.lastSeen - a.lastSeen);
+  const now = Date.now();
+  const asyncIn = s.asyncIn.filter((c) => c.replyScore !== null || c.expiresAt > now);
+  const asyncOut = s.asyncOut.filter((c) => c.replyScore !== null || c.expiresAt > now);
+  const openIn = asyncIn.filter((c) => c.replyScore === null).length;
 
   async function shareMe() {
     if (!handle) return;
@@ -161,6 +171,22 @@ export default function Friends() {
         </section>
       )}
 
+      {asyncIn.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>
+              Beat their score{openIn > 0 && <span className="count">{openIn}</span>}
+            </h2>
+            <span className="fine">Same game, 24 hours, first try counts</span>
+          </div>
+          <ul className="list">
+            {asyncIn.map((c) => (
+              <AsyncInRow key={c.id} c={c} />
+            ))}
+          </ul>
+        </section>
+      )}
+
       {s.incoming.length > 0 && (
         <section className="section">
           <div className="section-head">
@@ -191,6 +217,19 @@ export default function Friends() {
           </h2>
           <span className="fine">{friends.filter((f) => f.online).length} online</span>
         </div>
+        {friends.length > 0 && (
+          <div className="seg-row mode-pick-inline">
+            <span>Challenge scoring</span>
+            <div className="seg" role="group" aria-label="Scoring for live challenges">
+              <button aria-pressed={s.duelMode === 'standard'} onClick={() => s.setDuelMode('standard')}>
+                Standard
+              </button>
+              <button aria-pressed={s.duelMode === 'friendly'} onClick={() => s.setDuelMode('friendly')}>
+                Friendly
+              </button>
+            </div>
+          </div>
+        )}
         {friends.length ? (
           <ul className="list">
             {friends.map((f) => (
@@ -214,6 +253,20 @@ export default function Friends() {
           </div>
         )}
       </section>
+
+      {asyncOut.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>Your challenges</h2>
+            <span className="fine">Send one from any results screen</span>
+          </div>
+          <ul className="list">
+            {asyncOut.map((c) => (
+              <AsyncOutRow key={c.id} c={c} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {s.outgoing.length > 0 && (
         <section className="section">
@@ -261,7 +314,8 @@ function InviteRow({ inv }: { inv: InviteView }) {
           <span className="handle">@{inv.from.handle}</span> challenged you
         </span>
         <span className="item-sub">
-          {g?.title ?? 'Any game'} · {ago(inv.createdAt)}
+          {g?.title ?? 'Any game'}
+          {inv.mode === 'friendly' && ' · friendly scoring'} · {ago(inv.createdAt)}
         </span>
       </span>
       <button
@@ -276,6 +330,63 @@ function InviteRow({ inv }: { inv: InviteView }) {
       <button className="icon-btn" aria-label="Decline" onClick={() => void answerInvite(inv, false)}>
         <X />
       </button>
+    </li>
+  );
+}
+
+/** A friend's "Beat my score": play it (same seed) or see how your reply went. */
+function AsyncInRow({ c }: { c: AsyncChallengeView }) {
+  const replied = c.replyScore !== null;
+  const out = replied ? asyncOutcome(c.score, c.replyScore!) : null;
+  return (
+    <li className={`item async-row ${out ? `is-${out}` : ''}`}>
+      <Orb size={38} skin={skinOf(c.from.skin)} spin={false} />
+      <span className="item-body">
+        <span className="item-title">
+          <span className="handle">@{c.from.handle}</span>: beat my <b className="num">{formatScore(c.score)}</b>
+        </span>
+        <span className="item-sub">
+          {gameTitle(c.gameId)} ·{' '}
+          {replied ? (
+            <span className="num">
+              you scored {formatScore(c.replyScore!)} · {out === 'won' ? 'you won' : out === 'draw' ? 'draw' : 'they won'}
+            </span>
+          ) : (
+            left(c.expiresAt)
+          )}
+        </span>
+      </span>
+      {replied ? (
+        out === 'won' ? (
+          <Trophy size={18} className="async-mark" aria-label="You won" />
+        ) : null
+      ) : (
+        <button className="btn btn-sm btn-primary" onClick={() => navigate(asyncPlayPath(c))} aria-label={`Play @${c.from.handle}'s challenge on ${gameTitle(c.gameId)}`}>
+          <Play size={14} /> Play
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** A challenge I sent: waiting, or their result. */
+function AsyncOutRow({ c }: { c: AsyncChallengeView }) {
+  const replied = c.replyScore !== null;
+  // From my side: I win when their reply falls short.
+  const out = replied ? asyncOutcome(c.replyScore!, c.score) : null;
+  return (
+    <li className={`item async-row ${out ? `is-${out}` : ''}`}>
+      <Orb size={38} skin={skinOf(c.to.skin)} spin={false} />
+      <span className="item-body">
+        <span className="item-title">
+          <span className="handle">@{c.to.handle}</span> · {gameTitle(c.gameId)}
+        </span>
+        <span className="item-sub num">
+          Your {formatScore(c.score)} ·{' '}
+          {replied ? `they scored ${formatScore(c.replyScore!)} · ${out === 'won' ? 'you won' : out === 'draw' ? 'draw' : 'they won'}` : `waiting · ${left(c.expiresAt)}`}
+        </span>
+      </span>
+      {out === 'won' ? <Trophy size={18} className="async-mark" aria-label="You won" /> : !replied ? <span className="chip sm">Sent</span> : null}
     </li>
   );
 }

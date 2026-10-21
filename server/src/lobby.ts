@@ -13,6 +13,7 @@ import {
 } from '../../src/platform/versus/protocol';
 import { cleanName, matchOf, PID_RE, type Env } from './util';
 import * as db from './db';
+import { pairQueue, pickOpponent, ratingWindow, type Seeker } from './matchmaking';
 
 interface Att {
   pid: string;
@@ -24,6 +25,10 @@ const MATCH_TTL_MS = 15 * 60_000;
 const DONE_VISIBLE_MS = 45_000;
 const GHOSTS_PER_GAME = 12;
 const LEADERS = 20;
+/** While anyone is searching, re-check the queue this often (rating windows widen as people wait). */
+const SWEEP_MS = 2000;
+
+type Queued = Seeker & { ws: WebSocket; a: Att };
 
 export class Lobby extends DurableObject<Env> {
   private matches = new Map<string, MatchSummary>();
@@ -171,32 +176,61 @@ export class Lobby extends DurableObject<Env> {
     return this.open().filter((w) => this.att(w).queue).length;
   }
 
+  private queued(): Queued[] {
+    const out: Queued[] = [];
+    for (const w of this.open()) {
+      const a = this.att(w);
+      if (a.pid && a.queue) out.push({ pid: a.pid, rating: a.queue.rating, since: a.queue.since, gameId: a.queue.gameId, ws: w, a });
+    }
+    return out;
+  }
+
+  private sendQueued(ws: WebSocket, since: number, waiting: number, now = Date.now()) {
+    const gap = ratingWindow(now - since);
+    this.send(ws, { t: 'queued', since, waiting, gap: Number.isFinite(gap) ? gap : null });
+  }
+
+  /** Someone just joined the queue: match them now if a close-enough opponent is waiting, else keep searching. */
   private async tryPair(ws: WebSocket, me: Att) {
     const q = me.queue!;
-    let best: { ws: WebSocket; a: Att; diff: number } | null = null;
-    for (const w of this.open()) {
-      if (w === ws) continue;
-      const o = this.att(w);
-      if (!o.queue || o.pid === me.pid) continue;
-      if (q.gameId && o.queue.gameId && q.gameId !== o.queue.gameId) continue;
-      const diff = Math.abs(o.queue.rating - q.rating);
-      if (!best || diff < best.diff) best = { ws: w, a: o, diff };
-    }
+    const now = Date.now();
+    const others = this.queued().filter((s) => s.ws !== ws);
+    const best = pickOpponent({ pid: me.pid, rating: q.rating, since: q.since, gameId: q.gameId }, others, now);
     if (!best) {
-      this.send(ws, { t: 'queued', since: q.since, waiting: this.waiting() });
+      this.sendQueued(ws, q.since, others.length + 1, now);
+      await this.armSweep();
       return;
     }
-    const other = best.a;
+    await this.pair(ws, me, best.ws, best.a);
+  }
+
+  private async armSweep() {
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + SWEEP_MS);
+  }
+
+  /** Periodic sweep: windows have widened since people queued, so pairs that weren't allowed may be now. */
+  async alarm() {
+    const now = Date.now();
+    for (const [x, y] of pairQueue(this.queued(), now)) await this.pair(x.ws, x.a, y.ws, y.a);
+    const rest = this.queued();
+    for (const s of rest) this.sendQueued(s.ws, s.a.queue!.since, rest.length, now);
+    if (rest.length) await this.ctx.storage.setAlarm(now + SWEEP_MS);
+  }
+
+  private async pair(ws: WebSocket, me: Att, otherWs: WebSocket, other: Att) {
+    const q = me.queue!;
     // The player who waited longer decides an open "any game" choice.
     const first = other.queue!.since <= q.since ? other.queue! : q;
     const gameId = q.gameId ?? other.queue!.gameId ?? first.fallback;
+    const host = first === q ? me.pid : other.pid;
     const code = await this.newCode();
     await matchOf(this.env, code).init({
       code,
       kind: 'duel',
       ranked: true,
+      mode: 'standard',
       public: true,
-      host: other.pid,
+      host,
       gameId,
       max: 2,
       expect: [other.pid, me.pid],
@@ -204,9 +238,9 @@ export class Lobby extends DurableObject<Env> {
     delete me.queue;
     delete other.queue;
     ws.serializeAttachment(me);
-    best.ws.serializeAttachment(other);
+    otherWs.serializeAttachment(other);
     this.send(ws, { t: 'matched', code, gameId });
-    this.send(best.ws, { t: 'matched', code, gameId });
+    this.send(otherWs, { t: 'matched', code, gameId });
   }
 
   // ---------- RPC: rooms & live list ----------

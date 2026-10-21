@@ -57,6 +57,31 @@ export function describeRule(r: Rule, n: number): string {
   }
 }
 
+const FILL_NAMES = ['solid', 'outlined', 'double'];
+const EDGE_NAMES = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * Short spoken description of a tile for screen readers, e.g. "2 solid triangles, weave 45°, stitched top, left".
+ * `vary` lists the attributes worth naming (those that differ somewhere in the puzzle); shape, count and fill are
+ * always named.
+ */
+export function describeTile(t: Tile, vary: ReadonlySet<Attr>): string {
+  const n = t.count + 1;
+  const parts = [`${n} ${FILL_NAMES[t.fill]} ${SHAPE_NAMES[t.shape]}${n > 1 ? 's' : ''}`];
+  if (vary.has('stripe')) parts.push(`weave ${t.stripe * 45}°`);
+  if (vary.has('marks')) {
+    const edges = EDGE_NAMES.filter((_, k) => t.marks & (1 << k));
+    parts.push(edges.length ? `stitched ${edges.join(' ')}` : 'no stitches');
+  }
+  return parts.join(', ');
+}
+
+/** Attributes that are not the same on every tile (grid and candidates) of a puzzle. */
+export function varyingAttrs(p: Puzzle): Set<Attr> {
+  const all = [...p.grid.flat(), ...p.candidates];
+  return new Set(ATTRS.filter((a) => new Set(all.map((t) => t[a])).size > 1));
+}
+
 /** Rule difficulty rank used for "hardest rule solved". */
 export function ruleRank(r: Rule): number {
   if (r.kind === 'dist') return 5;

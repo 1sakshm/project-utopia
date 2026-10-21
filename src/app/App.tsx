@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { matchPath, navigate, useRoute } from './router';
+import { haptic } from './fx';
 import Feed, { openGame } from './pages/Feed';
 import PlayOverlay from './components/PlayOverlay';
 import { useSettings, prefersReducedMotion } from '@/platform/settings';
@@ -19,7 +20,7 @@ import { useEconomy } from '@/platform/economy';
 import { SKINS, THEMES } from '@/platform/shop';
 import { useVersusLive } from '@/platform/versus/live';
 import { VERSUS_ENABLED } from '@/platform/versus/config';
-import { answerInvite, ensureRegistered, pendingCount, useSocial } from '@/platform/social';
+import { answerInvite, ensureRegistered, parseAsyncPlay, pendingCount, useSocial } from '@/platform/social';
 import { startSync } from '@/platform/account';
 import { GAME_BY_ID as GAMES_BY_ID } from '@/games/registry';
 
@@ -173,6 +174,7 @@ export default function App() {
               aria-current={active ? 'page' : undefined}
               onClick={() => {
                 audioEngine.uiTap();
+                haptic('tap');
                 navigate(p);
               }}
             >
@@ -195,7 +197,7 @@ export default function App() {
       </main>
       {play && (
         <ErrorBoundary key={play.id + search} where={`play:${play.id}`} onExit={() => navigate('/', { replace: true })}>
-          <PlayOverlay gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} />
+          <PlayOverlay gameId={play.id} daily={new URLSearchParams(search).get('daily') === '1'} challenge={parseAsyncPlay(search) ?? undefined} />
         </ErrorBoundary>
       )}
       {!play && !overlayOpen && <InviteToast />}
@@ -230,7 +232,9 @@ function InviteToast() {
         <span className="item-title">
           <span className="handle">@{inv.from.handle}</span> challenged you
         </span>
-        <small>1v1 · {game ?? 'any game'} · 60 seconds</small>
+        <small>
+          1v1 · {game ?? 'any game'} · 60 seconds{inv.mode === 'friendly' ? ' · friendly scoring' : ''}
+        </small>
       </span>
       <button
         className="btn btn-sm btn-primary"

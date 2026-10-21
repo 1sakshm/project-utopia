@@ -11,6 +11,8 @@ import {
   makeChoicePuzzle,
   rotAll,
   projKey,
+  projection,
+  describeCells,
   solve,
   MOVES_FOR,
   type V3,
@@ -123,8 +125,29 @@ export default function create(ctx: GameContext): GameInstance {
   let choicesRight = 0;
   let maxLevel = stair.level;
   let lastAxes = 0;
+  let lastSaidAxes = 0;
 
   const reduced = () => ctx.settings.reducedMotion;
+
+  // ---------------------------------------------------------------- screen-reader text (never in preview)
+  // The wall is described as a small grid of filled / empty cells, so the outline and the live shadow can be
+  // compared by ear. Choice rounds describe the outline only (the 3D sculptures themselves are not described).
+  let toldRepeat = false;
+  function say(text: string) {
+    if (!preview) ctx.announce(text);
+  }
+  const outlineText = () => `Outline: ${describeCells(view.targetCells)}.`;
+  const shadowText = () => (view.sculpts[0] ? `Shadow: ${describeCells(projection(view.sculpts[0].vs))}.` : '');
+  function readWall() {
+    if (preview) return;
+    if (view.mode === 'rotate') say(`${outlineText()} ${shadowText()}`);
+    else if (view.targetCells.length) say(`${outlineText()} Press 1, 2 or 3.`);
+  }
+  function repeatTip() {
+    if (toldRepeat) return '';
+    toldRepeat = true;
+    return ' Press R to hear the wall again.';
+  }
 
   function hud(label?: string) {
     ctx.hud.set({
@@ -177,6 +200,10 @@ export default function create(ctx: GameContext): GameInstance {
         accepting = false;
         queue.length = 0;
         resolveDone?.(true);
+      } else if (!queue.length && accepting && !preview) {
+        // only once the queue drains, so quick double-presses give one description
+        const name = MOVE_NAME[m];
+        say(`${name[0].toUpperCase()}${name.slice(1)}. ${shadowText()}`);
       }
     }
     busy = false;
@@ -185,6 +212,7 @@ export default function create(ctx: GameContext): GameInstance {
     if (!accepting || view.mode !== 'rotate') return;
     if (!MOVES_FOR[view.axes].includes(m)) {
       ctx.caption(view.axes === 1 ? 'Only left / right turns for now' : 'Roll unlocks later');
+      say(view.axes === 1 ? 'Only left and right turns for now' : 'Roll unlocks later');
       return;
     }
     if (queue.length >= 2) return;
@@ -309,7 +337,9 @@ export default function create(ctx: GameContext): GameInstance {
     await appear([s]);
     await outlineIn;
     if (!alive) return;
-    ctx.announce(`Sculpture ${done + 1} of ${SESSION}. Match the outline in ${optimal} turns.`);
+    const newAxis = def.axes > lastSaidAxes && lastSaidAxes > 0 ? (def.axes === 2 ? ' New: tip up and down with up and down arrows.' : ' New: roll with Q and E.') : '';
+    lastSaidAxes = def.axes;
+    say(`Sculpture ${done + 1} of ${SESSION}. Match the outline in ${optimal} turns.${newAxis} ${outlineText()} ${shadowText()}${repeatTip()}`);
     accepting = true;
     const res = new Promise<boolean>((r) => (resolveDone = r));
     if (preview) void ghostRotate();
@@ -358,7 +388,7 @@ export default function create(ctx: GameContext): GameInstance {
     await appear(view.sculpts);
     await outlineIn;
     if (!alive) return;
-    ctx.announce('Which sculpture could cast this shadow? Press 1, 2 or 3.');
+    say(`Choice round: which of 3 sculptures could cast this shadow? The sculptures are not described. ${outlineText()} Press 1, 2 or 3.${repeatTip()}`);
     accepting = true;
     const res = new Promise<boolean>((r) => (resolveDone = r));
     if (preview) void ghostChoice();
@@ -376,12 +406,14 @@ export default function create(ctx: GameContext): GameInstance {
       ctx.audio.bell(note(7), { gain: 0.1, dur: 3 });
       ctx.audio.bell(note(11), { gain: 0.06, dur: 3 });
       ctx.caption('Correct!');
+      say('Correct.');
       hud('Correct +150');
     } else {
       view.sculpts[chosenIndex].dim = 1;
       ctx.audio.thunk({ gain: 0.2 });
       ctx.haptics.error();
       ctx.caption(`Not quite — it was number ${choiceCorrect + 1}`);
+      say(`Not quite, it was number ${choiceCorrect + 1}.`);
       hud(`It was #${choiceCorrect + 1}`);
     }
     // reveal: the correct sculpture turns until its shadow fills the outline
@@ -533,6 +565,7 @@ export default function create(ctx: GameContext): GameInstance {
     KeyQ: () => doMove('Z+'),
     KeyE: () => doMove('Z-'),
     KeyH: hint,
+    KeyR: readWall,
     Digit1: () => choose(0),
     Digit2: () => choose(1),
     Digit3: () => choose(2),

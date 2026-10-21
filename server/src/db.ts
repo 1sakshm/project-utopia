@@ -1,5 +1,15 @@
 // D1 access: players (with @handles), friendships, challenges, match history and ratings.
-import { elo, START_RATING, type FriendView, type InviteView, type PublicProfile, type Record_ } from '../../src/platform/versus/protocol';
+import {
+  ASYNC_TTL_MS,
+  elo,
+  START_RATING,
+  type AsyncChallengeView,
+  type FriendView,
+  type InviteView,
+  type PublicProfile,
+  type Record_,
+  type ScoreMode,
+} from '../../src/platform/versus/protocol';
 import { checkHandle, slugHandle } from '../../src/platform/versus/handles';
 import { cleanName, type Env } from './util';
 
@@ -267,7 +277,7 @@ export async function listFriends(env: Env, me: string, online: Set<string>) {
       WHERE i.to_id = ? AND i.status = 'pending' AND i.created_at > ? ORDER BY i.created_at DESC LIMIT 20`,
   )
     .bind(me, Date.now() - INVITE_TTL_MS)
-    .all<{ id: string; code: string; game_id: string | null; created_at: number; handle: string; name: string; skin: string }>();
+    .all<{ id: string; code: string; game_id: string | null; mode?: string | null; created_at: number; handle: string; name: string; skin: string }>();
   return {
     friends: rows.filter((r) => r.f_status === 'accepted').map(view),
     incoming: rows.filter((r) => r.f_status === 'pending' && r.f_by !== me).map(view),
@@ -284,23 +294,115 @@ export async function friendIds(env: Env, me: string): Promise<string[]> {
 // ---------- challenges ----------
 export const INVITE_TTL_MS = 10 * 60_000;
 
-export const inviteView = (r: { id: string; code: string; game_id: string | null; created_at: number; handle: string; name: string; skin: string }): InviteView => ({
+export const inviteView = (r: { id: string; code: string; game_id: string | null; mode?: string | null; created_at: number; handle: string; name: string; skin: string }): InviteView => ({
   id: r.id,
   code: r.code,
   gameId: r.game_id,
+  mode: r.mode === 'friendly' ? 'friendly' : 'standard',
   createdAt: r.created_at,
   from: { handle: r.handle, name: r.name, skin: r.skin },
 });
 
-export async function createInvite(env: Env, from: PlayerRow, to: PlayerRow, code: string, gameId: string | null): Promise<InviteView> {
+export async function createInvite(env: Env, from: PlayerRow, to: PlayerRow, code: string, gameId: string | null, mode: ScoreMode = 'standard'): Promise<InviteView> {
   const id = crypto.randomUUID();
   const now = Date.now();
-  await env.DB.prepare('INSERT INTO invites (id, from_id, to_id, code, game_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(id, from.id, to.id, code, gameId, now).run();
-  return inviteView({ id, code, game_id: gameId, created_at: now, handle: from.handle, name: from.name, skin: from.skin });
+  await env.DB.prepare('INSERT INTO invites (id, from_id, to_id, code, game_id, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, from.id, to.id, code, gameId, mode, now).run();
+  return inviteView({ id, code, game_id: gameId, mode, created_at: now, handle: from.handle, name: from.name, skin: from.skin });
 }
 
 export async function answerInvite(env: Env, me: string, id: string, status: 'accepted' | 'declined') {
   await env.DB.prepare("UPDATE invites SET status = ? WHERE id = ? AND to_id = ? AND status = 'pending'").bind(status, id, me).run();
+}
+
+// ---------- async challenges ("Beat my score") ----------
+/** A replied challenge stays listed this long after the reply (so the challenger sees the result). */
+export const ASYNC_RESULT_VISIBLE_MS = 24 * 3600_000;
+/** At most this many async challenges sent per player per day. */
+export const ASYNC_DAILY_LIMIT = 60;
+
+export interface AsyncRow {
+  id: string;
+  from_pid: string;
+  to_pid: string;
+  game_id: string;
+  seed: number;
+  start_level: number;
+  score: number;
+  created_at: number;
+  expires_at: number;
+  reply_score: number | null;
+  replied_at: number | null;
+}
+
+type AsyncJoined = AsyncRow & { f_handle: string; f_name: string; f_skin: string; t_handle: string; t_name: string; t_skin: string };
+
+export const asyncView = (r: AsyncJoined): AsyncChallengeView => ({
+  id: r.id,
+  gameId: r.game_id,
+  seed: r.seed,
+  startLevel: r.start_level,
+  score: r.score,
+  createdAt: r.created_at,
+  expiresAt: r.expires_at,
+  replyScore: r.reply_score,
+  repliedAt: r.replied_at,
+  from: { handle: r.f_handle, name: r.f_name, skin: r.f_skin },
+  to: { handle: r.t_handle, name: r.t_name, skin: r.t_skin },
+});
+
+const ASYNC_SELECT = `SELECT c.*, f.handle AS f_handle, f.name AS f_name, f.skin AS f_skin, t.handle AS t_handle, t.name AS t_name, t.skin AS t_skin
+  FROM async_challenges c JOIN players f ON f.id = c.from_pid JOIN players t ON t.id = c.to_pid`;
+/** Open (not expired, not answered) or answered recently. Expired unanswered challenges are hidden. */
+const ASYNC_VISIBLE = '((c.reply_score IS NULL AND c.expires_at > ?2) OR (c.reply_score IS NOT NULL AND c.replied_at > ?3))';
+
+export async function createAsync(
+  env: Env,
+  o: { from: string; to: string; gameId: string; seed: number; startLevel: number; score: number },
+): Promise<AsyncChallengeView | { error: string }> {
+  const now = Date.now();
+  const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM async_challenges WHERE from_pid = ? AND created_at > ?').bind(o.from, now - 864e5).first<{ n: number }>();
+  if ((sent?.n ?? 0) >= ASYNC_DAILY_LIMIT) return { error: 'That’s a lot of challenges for one day. Try again tomorrow.' };
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    'INSERT INTO async_challenges (id, from_pid, to_pid, game_id, seed, start_level, score, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+    .bind(id, o.from, o.to, o.gameId, o.seed, o.startLevel, o.score, now, now + ASYNC_TTL_MS)
+    .run();
+  return (await getAsync(env, id))!;
+}
+
+export async function getAsync(env: Env, id: string): Promise<AsyncChallengeView | null> {
+  const r = await env.DB.prepare(`${ASYNC_SELECT} WHERE c.id = ?1`).bind(id).first<AsyncJoined>();
+  return r ? asyncView(r) : null;
+}
+
+export async function listAsync(env: Env, me: string): Promise<{ incoming: AsyncChallengeView[]; outgoing: AsyncChallengeView[] }> {
+  const now = Date.now();
+  const q = (col: 'to_pid' | 'from_pid') =>
+    env.DB.prepare(`${ASYNC_SELECT} WHERE c.${col} = ?1 AND ${ASYNC_VISIBLE} ORDER BY c.created_at DESC LIMIT 30`)
+      .bind(me, now, now - ASYNC_RESULT_VISIBLE_MS)
+      .all<AsyncJoined>();
+  const [inc, out] = await Promise.all([q('to_pid'), q('from_pid')]);
+  return { incoming: inc.results.map(asyncView), outgoing: out.results.map(asyncView) };
+}
+
+/** Record the friend's reply. Only the first reply counts, and only before the challenge expires. */
+export async function replyAsync(
+  env: Env,
+  me: string,
+  id: string,
+  score: number,
+): Promise<{ challenge: AsyncChallengeView } | { error: string; status: number; challenge?: AsyncChallengeView }> {
+  const now = Date.now();
+  const r = await env.DB.prepare('UPDATE async_challenges SET reply_score = ?, replied_at = ? WHERE id = ? AND to_pid = ? AND reply_score IS NULL AND expires_at > ?')
+    .bind(score, now, id, me, now)
+    .run();
+  const c = await getAsync(env, id);
+  if (r.meta.changes && c) return { challenge: c };
+  const row = await env.DB.prepare('SELECT to_pid, reply_score FROM async_challenges WHERE id = ?').bind(id).first<Pick<AsyncRow, 'to_pid' | 'reply_score'>>();
+  if (!row || row.to_pid !== me || !c) return { error: 'No such challenge.', status: 404 };
+  if (row.reply_score !== null) return { error: 'Only your first try counts.', status: 409, challenge: c };
+  return { error: 'This challenge has expired.', status: 410 };
 }
 
 // ---------- matches & ratings ----------
@@ -309,12 +411,14 @@ export interface FinishedPlayer {
   score: number;
   place: number;
   forfeit: boolean;
+  /** Friendly rounds: percent of own best. */
+  rel?: number;
 }
 
 /** Store a finished round; for ranked duels apply Elo. Returns rating deltas by pid. */
 export async function recordMatch(
   env: Env,
-  m: { code: string; gameId: string | null; kind: string; ranked: boolean; players: FinishedPlayer[] },
+  m: { code: string; gameId: string | null; kind: string; ranked: boolean; mode?: 'standard' | 'friendly'; players: FinishedPlayer[] },
 ): Promise<Record<string, number>> {
   const deltas: Record<string, number> = {};
   const rows = new Map<string, PlayerRow>();
@@ -323,7 +427,7 @@ export async function recordMatch(
     if (r) rows.set(p.pid, r);
   }
   const stmts: D1PreparedStatement[] = [];
-  if (m.ranked && m.players.length === 2 && rows.size === 2) {
+  if (m.ranked && m.mode !== 'friendly' && m.players.length === 2 && rows.size === 2) {
     const [a, b] = m.players;
     const ra = rows.get(a.pid)!;
     const rb = rows.get(b.pid)!;
@@ -339,7 +443,14 @@ export async function recordMatch(
     }
   }
   for (const p of m.players) if (rows.has(p.pid)) stmts.push(env.DB.prepare('UPDATE players SET matches = matches + 1 WHERE id = ?').bind(p.pid));
-  const summary = m.players.map((p) => ({ handle: rows.get(p.pid)?.handle ?? null, score: p.score, place: p.place, delta: deltas[p.pid] ?? null, forfeit: p.forfeit }));
+  const summary = m.players.map((p) => ({
+    handle: rows.get(p.pid)?.handle ?? null,
+    score: p.score,
+    place: p.place,
+    delta: deltas[p.pid] ?? null,
+    forfeit: p.forfeit,
+    ...(m.mode === 'friendly' ? { rel: p.rel ?? null } : {}),
+  }));
   const ins = await env.DB.prepare('INSERT INTO matches (code, game_id, kind, ranked, finished_at, players) VALUES (?, ?, ?, ?, ?, ?) RETURNING id')
     .bind(m.code, m.gameId, m.kind, m.ranked ? 1 : 0, Date.now(), JSON.stringify(summary))
     .first<{ id: number }>();

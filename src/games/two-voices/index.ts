@@ -22,10 +22,11 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
       notes: [
-        'Best with headphones (stereo)',
+        'Best with headphones (stereo); her voice is always left and his always right, so voice also tells the ears apart',
+        'Playable by sound alone: the question and the numbered words (keys 1–4) are announced, as are picks and what each ear said',
         'Ears are shown by position, an ear icon and a label, never by color alone',
         'With captions on, both words appear briefly beside each ear',
         'Without Sarvam voices, the words play one after another',

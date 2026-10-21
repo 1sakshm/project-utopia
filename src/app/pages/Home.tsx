@@ -4,7 +4,9 @@ import { GAMES, GAME_BY_ID } from '@/games/registry';
 import { useProgress } from '@/platform/progress';
 import { useEconomy, levelProgress } from '@/platform/economy';
 import { useProfile } from '@/platform/profile';
-import { computeStreak, trioStatus } from '@/platform/retention';
+import { computeStreak, trioStatus, weekFamilies } from '@/platform/retention';
+import { RINGS } from '@/platform/abilities';
+import { StarterCard } from '../components/Growth';
 import { useVersusLive } from '@/platform/versus/live';
 import { VERSUS_ENABLED } from '@/platform/versus/config';
 import { track } from '@/platform/analytics';
@@ -16,7 +18,7 @@ import { formatScore } from '../components/Common';
 import Wallet from '../components/Wallet';
 import { AdSlot } from '../components/AdSlot';
 import { OrbHero, useSkin } from '../components/Orb';
-import { burstFrom } from '../fx';
+import { burstFrom, haptic } from '../fx';
 
 function resetIn() {
   const now = new Date();
@@ -33,6 +35,7 @@ export default function Home() {
   const name = useProfile((s) => s.name);
   const skin = useSkin();
   const streak = useMemo(() => computeStreak(history), [history]);
+  const week = useMemo(() => weekFamilies(history), [history]);
   const trio = trioStatus(games);
   const nextIdx = trio.done.findIndex((d) => !d);
   const recent = useMemo(() => {
@@ -44,6 +47,31 @@ export default function Home() {
   const orbRef = useRef<HTMLDivElement>(null);
   const [taps, setTaps] = useState(0);
   const orbSize = Math.min(230, Math.round(window.innerWidth * 0.56));
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+
+  // The orb celebrates a new player level the first time you come back Home after reaching it.
+  useEffect(() => {
+    let seen = 0;
+    try {
+      seen = Number(localStorage.getItem('utopia.seenLevel') ?? 0);
+      localStorage.setItem('utopia.seenLevel', String(lp.level));
+    } catch {
+      return;
+    }
+    if (!seen || lp.level <= seen) return;
+    const t = window.setTimeout(() => {
+      setLevelUp(lp.level);
+      setTaps((n) => n + 1);
+      haptic('celebrate');
+      burstFrom(orbRef.current, { count: 70, power: 0.9, colors: [...skin.stops.slice(0, 3)] });
+    }, 500);
+    const u = window.setTimeout(() => setLevelUp(null), 4200);
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(u);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lp.level]);
 
   const play = () => {
     track({ name: 'home_click', target: 'hero_play' });
@@ -57,8 +85,13 @@ export default function Home() {
         <span className="brand-word">Utopia</span>
         <span className="spacer" />
         {streak.days > 0 && (
-          <span className="chip streak-chip" aria-label={`${streak.days}-day streak`}>
+          <span
+            className="chip streak-chip"
+            aria-label={`${streak.days}-day streak. ${streak.freezeReady ? 'Rest day available: missing one day this week won’t break it.' : 'Rest day used this week.'}`}
+            title={streak.freezeReady ? 'Rest day ready: miss one day this week and your streak stays' : 'Rest day used this week'}
+          >
             <Flame size={15} fill="currentColor" /> {streak.days}
+            {streak.freezeReady && <i className="rest-dot" aria-hidden />}
           </span>
         )}
         <Wallet />
@@ -66,6 +99,11 @@ export default function Home() {
 
       <section className="hero2">
         <div className="hero2-orb" ref={orbRef}>
+          {levelUp && (
+            <span className="orb-levelup" role="status">
+              Level {levelUp}
+            </span>
+          )}
           <OrbHero
             size={orbSize}
             pulseKey={taps}
@@ -97,6 +135,8 @@ export default function Home() {
         </button>
       </section>
 
+      {history.length < 40 && <StarterCard />}
+
       <section className="section">
         <div className="section-head">
           <h2>
@@ -125,6 +165,16 @@ export default function Home() {
             );
           })}
         </ol>
+        <p className="week-fams" aria-label={`This week you've played ${week.played.length} of ${week.all.length} ability families`}>
+          <span className="week-fams-dots" aria-hidden>
+            {RINGS.filter((r) => week.all.includes(r.id)).map((r) => (
+              <i key={r.id} title={r.label} className={week.played.includes(r.id) ? 'on' : ''} style={{ '--c': r.color } as React.CSSProperties} />
+            ))}
+          </span>
+          <span>
+            This week: {week.played.length} of {week.all.length} families
+          </span>
+        </p>
       </section>
 
       {VERSUS_ENABLED && <VersusBanner />}

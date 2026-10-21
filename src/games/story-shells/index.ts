@@ -14,6 +14,7 @@ export default defineGame({
       keyboard: [
         ['1–3', 'Choose a card'],
         ['R', 'Hear the story again'],
+        ['T', 'Hear the choices read out'],
       ],
     },
     abilities: { primary: 'sustained-attention', secondary: ['phonological-awareness'] },
@@ -25,9 +26,15 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
-      notes: ['With captions on, each sentence is shown as it is spoken', 'No time limit when answering', 'English and Hindi voices'],
+      notes: [
+        'Playable by sound alone: the story and question are spoken; screen readers also hear the numbered choices, and T speaks them aloud',
+        'Right and wrong answers, the correct answer and story progress are announced',
+        'With captions on, each sentence is shown as it is spoken',
+        'No time limit when answering',
+        'English and Hindi voices',
+      ],
     },
     palette: { bg: '#07121f', bg2: '#16324a', accent: '#8ff0e0', accent2: '#ffb8d2', highlight: '#fff1c9' },
     science: {

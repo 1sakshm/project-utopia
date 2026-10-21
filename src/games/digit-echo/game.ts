@@ -440,13 +440,14 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         ctx.haptics.success();
         lanterns.forEach((L, i) => ctx.after(i * 60, () => particles.burst(L.x, L.y, 14, { color: hex(pal.highlight), speed: 180, life: 0.9 })));
         status.text = 'PERFECT ECHO';
-        ctx.announce('All digits right');
+        ctx.announce(`All ${n} digits right. Score ${score}`);
       } else {
         score += right * 2;
         misses++;
         ctx.haptics.error();
         status.text = right ? `${right} OF ${n} RIGHT` : 'NOT QUITE';
-        ctx.announce(`${right} of ${n} digits right. The digits were ${seq.join(' ')}`);
+        const left = MAX_MISSES - misses;
+        ctx.announce(`${right} of ${n} digits right. The digits were ${seq.join(' ')}. ${left > 0 ? `${left} ${left === 1 ? 'life' : 'lives'} left` : 'No lives left'}`);
       }
       stair.record(ok);
       if (preview && (stair.level > 5 || stair.level < 3)) stair.set(4);

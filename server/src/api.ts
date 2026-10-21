@@ -11,8 +11,11 @@
 //   GET    /me/friends                                        → {friends, incoming, outgoing, invites}
 //   POST   /me/friends               {handle}                 send / accept → {status}
 //   DELETE /me/friends/:handle                                remove / decline / cancel
-//   POST   /me/challenge             {handle, gameId?}        private duel + invite → {code}
+//   POST   /me/challenge             {handle, gameId?, mode?}  private duel + invite → {code}   (mode: standard | friendly)
 //   POST   /me/invites/:id           {action: accept|decline}
+//   GET    /me/async                                          "Beat my score" challenges → {incoming, outgoing}
+//   POST   /me/async                 {handle, gameId, seed, startLevel, score}           → {challenge}
+//   POST   /me/async/:id/reply       {score}                  first reply only → {challenge} | 409 {challenge} | 410
 //   GET    /admin/players?q=&offset=  (Bearer ADMIN_TOKEN)    → {total, players}
 //   GET    /admin/stats              (Bearer ADMIN_TOKEN)
 //
@@ -29,6 +32,8 @@ import { checkHandle } from '../../src/platform/versus/handles';
 import { lobbyOf, matchOf, PID_RE, type Env } from './util';
 import * as db from './db';
 import { checkPassword, hashPassword, randomKey, verifyGoogleToken, verifyPassword } from './auth';
+import { parseAsyncCreate, parseReplyScore } from './challenges';
+import { isScoreMode } from '../../src/platform/versus/protocol';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -282,16 +287,17 @@ export async function handleApi(req: Request, env: Env, path: string, url: URL, 
   }
 
   if (path === '/me/challenge' && method === 'POST') {
-    const b = await body<{ handle?: string; gameId?: string }>(req);
+    const b = await body<{ handle?: string; gameId?: string; mode?: string }>(req);
     const other = b.handle ? await db.byHandle(env, b.handle) : null;
     if (!other || other.id === self.id) return json({ error: 'No player with that handle.' }, 404);
     const rel = await db.relation(env, self.id, other.id);
     if (rel?.status !== 'accepted') return json({ error: 'You can only challenge friends.' }, 403);
     const gameId = b.gameId && GAME_RE.test(b.gameId) ? b.gameId : null;
+    const mode = isScoreMode(b.mode) ? b.mode : 'standard';
     const lobby = lobbyOf(env);
     const code = await lobby.newCode();
-    await matchOf(env, code).init({ code, kind: 'duel', ranked: false, public: false, host: self.id, gameId, max: 2, expect: [self.id, other.id] });
-    const invite = await db.createInvite(env, self, other, code, gameId);
+    await matchOf(env, code).init({ code, kind: 'duel', ranked: false, mode, public: false, host: self.id, gameId, max: 2, expect: [self.id, other.id] });
+    const invite = await db.createInvite(env, self, other, code, gameId, mode);
     const delivered = await lobby.notify(other.id, { t: 'invite', invite });
     return json({ code, delivered });
   }
@@ -301,6 +307,33 @@ export async function handleApi(req: Request, env: Env, path: string, url: URL, 
     const { action } = await body<{ action?: string }>(req);
     await db.answerInvite(env, self.id, m[1], action === 'accept' ? 'accepted' : 'declined');
     return json({ ok: true });
+  }
+
+  // ---------- async challenges ("Beat my score") ----------
+  if (path === '/me/async' && method === 'GET') return json(await db.listAsync(env, self.id));
+
+  if (path === '/me/async' && method === 'POST') {
+    const p = parseAsyncCreate(await body<Record<string, unknown>>(req));
+    if ('error' in p) return json({ error: p.error }, 400);
+    const other = await db.byHandle(env, p.handle);
+    if (!other || other.id === self.id) return json({ error: 'No player with that handle.' }, 404);
+    const rel = await db.relation(env, self.id, other.id);
+    if (rel?.status !== 'accepted') return json({ error: 'You can only challenge friends.' }, 403);
+    const res = await db.createAsync(env, { from: self.id, to: other.id, gameId: p.gameId, seed: p.seed, startLevel: p.startLevel, score: p.score });
+    if ('error' in res) return json({ error: res.error }, 429);
+    await lobbyOf(env).notify(other.id, { t: 'social' });
+    return json({ challenge: res });
+  }
+
+  m = path.match(/^\/me\/async\/([0-9a-f-]{36})\/reply$/);
+  if (m && method === 'POST') {
+    const score = parseReplyScore((await body<{ score?: unknown }>(req)).score);
+    if (score === null) return json({ error: 'Bad score' }, 400);
+    const res = await db.replyAsync(env, self.id, m[1], score);
+    if ('error' in res) return json({ error: res.error, challenge: res.challenge }, res.status);
+    const from = await db.byHandle(env, res.challenge.from.handle);
+    if (from) await lobbyOf(env).notify(from.id, { t: 'social' });
+    return json({ challenge: res.challenge });
   }
 
   return null;

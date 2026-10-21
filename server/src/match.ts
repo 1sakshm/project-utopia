@@ -8,12 +8,16 @@ import {
   EMOTES,
   ROUND_GRACE_MS,
   ROUND_MS,
+  isScoreMode,
+  rankValue,
+  relativeScore,
   type MatchIn,
   type MatchOut,
   type MatchSummary,
   type PlayerView,
   type RoomKind,
   type RoomView,
+  type ScoreMode,
 } from '../../src/platform/versus/protocol';
 import { lobbyOf, PID_RE, type Env } from './util';
 import * as db from './db';
@@ -31,7 +35,8 @@ interface PState extends PlayerView {
   leftAt: number;
 }
 
-interface Room extends Omit<RoomView, 'players' | 'spectators'> {
+interface Room extends Omit<RoomView, 'players' | 'spectators' | 'mode'> {
+  mode: ScoreMode;
   players: PState[];
   /** Quick-match rooms only admit the two matched players. */
   expect: string[] | null;
@@ -43,6 +48,8 @@ export interface InitOptions {
   code: string;
   kind: RoomKind;
   ranked: boolean;
+  /** Friendly rooms are never ranked. Default standard. */
+  mode?: ScoreMode;
   public: boolean;
   host: string;
   gameId: string | null;
@@ -67,6 +74,7 @@ export class Match extends DurableObject<Env> {
   private async getRoom(): Promise<Room | null> {
     if (!this.loaded) {
       this.room = (await this.ctx.storage.get<Room>('room')) ?? null;
+      if (this.room && !this.room.mode) this.room.mode = 'standard';
       this.loaded = true;
     }
     return this.room;
@@ -85,10 +93,12 @@ export class Match extends DurableObject<Env> {
   async init(o: InitOptions) {
     await this.getRoom();
     const now = Date.now();
+    const mode: ScoreMode = isScoreMode(o.mode) ? o.mode : 'standard';
     this.room = {
       code: o.code,
       kind: o.kind,
-      ranked: o.ranked,
+      ranked: o.ranked && mode === 'standard',
+      mode,
       public: o.public,
       host: o.host,
       gameId: o.gameId,
@@ -145,6 +155,7 @@ export class Match extends DurableObject<Env> {
       public: r.public,
       host: r.host,
       gameId: r.gameId,
+      mode: r.mode,
       seed: r.seed,
       state: r.state,
       startAt: r.startAt,
@@ -179,6 +190,7 @@ export class Match extends DurableObject<Env> {
       ranked: r.ranked,
       public: r.public,
       gameId: r.gameId,
+      mode: r.mode,
       state: r.state,
       players: r.players.map((p) => ({ name: p.name, score: p.score, done: p.done, rating: p.rating })),
       max: r.max,
@@ -291,8 +303,20 @@ export class Match extends DurableObject<Env> {
       }
 
       case 'settings': {
-        if (!me || me.pid !== r.host || r.kind !== 'party') return;
-        r.public = !!msg.public;
+        if (!me || me.pid !== r.host) return;
+        let changed = false;
+        if (typeof msg.public === 'boolean' && r.kind === 'party') {
+          r.public = msg.public;
+          changed = true;
+        }
+        // Scoring can be switched in unranked rooms between rounds; everyone has to ready up again.
+        if (isScoreMode(msg.mode) && msg.mode !== r.mode && !r.ranked && (r.state === 'lobby' || r.state === 'done')) {
+          if (r.state === 'done') this.resetRound();
+          r.mode = msg.mode;
+          for (const p of r.players) p.ready = false;
+          changed = true;
+        }
+        if (!changed) return;
         await this.save();
         this.pushRoom();
         return;
@@ -316,12 +340,15 @@ export class Match extends DurableObject<Env> {
         const l = Math.max(0, Math.min(1e4, Math.floor(Number(msg.l) || 0)));
         me.score = s;
         me.level = l;
+        // The personal best is fixed by the first report of the round, so it can't be lowered mid-round.
+        if (me.best === undefined && msg.b !== undefined) me.best = Math.max(0, Math.min(1e9, Math.floor(Number(msg.b) || 0)));
+        if (r.mode === 'friendly') me.rel = relativeScore(s, me.best);
         const t = Math.max(0, now - r.startAt);
         const last = me.timeline[me.timeline.length - 1];
         if (!last || t - last[0] >= TIMELINE_STEP_MS || msg.t === 'done') me.timeline.push([t, s]);
         if (msg.t === 'score') {
           ws.serializeAttachment({ ...a, lastScore: now });
-          const out = JSON.stringify({ t: 'score', pid: me.pid, s, l } satisfies MatchOut);
+          const out = JSON.stringify({ t: 'score', pid: me.pid, s, l, b: me.best } satisfies MatchOut);
           for (const w of this.open()) if (w !== ws) w.send(out);
           void this.pushSummary(false);
           await this.save(false);
@@ -420,6 +447,8 @@ export class Match extends DurableObject<Env> {
       p.forfeit = false;
       delete p.place;
       delete p.delta;
+      delete p.best;
+      delete p.rel;
     }
   }
 
@@ -444,6 +473,8 @@ export class Match extends DurableObject<Env> {
       p.done = !p.connected; // someone who already dropped doesn't hold the round open
       p.forfeit = !p.connected;
       p.timeline = [];
+      delete p.best;
+      delete p.rel;
     }
     await this.save();
     await this.schedule();
@@ -463,11 +494,13 @@ export class Match extends DurableObject<Env> {
       if (!p.done) p.done = true; // time cap reached: last reported score stands
       p.ready = false;
     }
-    // Places: forfeits last, then by score; equal scores share a place.
-    const order = [...r.players].sort((x, y) => Number(x.forfeit) - Number(y.forfeit) || y.score - x.score);
+    if (r.mode === 'friendly') for (const p of r.players) p.rel = relativeScore(p.score, p.best);
+    // Places: forfeits last, then by score (friendly: percent of own best); equal values share a place.
+    const val = (p: PState) => rankValue(r.mode, p);
+    const order = [...r.players].sort((x, y) => Number(x.forfeit) - Number(y.forfeit) || val(y) - val(x));
     order.forEach((p, i) => {
       const prev = order[i - 1];
-      p.place = prev && !prev.forfeit && !p.forfeit && prev.score === p.score ? prev.place : i + 1;
+      p.place = prev && !prev.forfeit && !p.forfeit && val(prev) === val(p) ? prev.place : i + 1;
     });
     const lobby = lobbyOf(this.env);
     try {
@@ -475,8 +508,10 @@ export class Match extends DurableObject<Env> {
         code: r.code,
         gameId: r.gameId,
         kind: r.kind,
-        ranked: r.ranked && r.players.length === 2,
-        players: r.players.map((p) => ({ pid: p.pid, score: p.score, place: p.place!, forfeit: p.forfeit })),
+        // Friendly rounds never touch ratings.
+        ranked: r.ranked && r.mode === 'standard' && r.players.length === 2,
+        mode: r.mode,
+        players: r.players.map((p) => ({ pid: p.pid, score: p.score, place: p.place!, forfeit: p.forfeit, rel: p.rel })),
       });
       for (const p of r.players) {
         if (deltas[p.pid] === undefined) continue;

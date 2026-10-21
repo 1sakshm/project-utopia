@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { elo, isRoomCode, ROOM_CODE_ALPHABET } from './protocol';
+import { asyncOutcome, elo, isRoomCode, rankValue, relativeScore, ROOM_CODE_ALPHABET } from './protocol';
 import { cleanName } from '../profile';
 import { checkHandle, slugHandle } from './handles';
 
@@ -42,5 +42,28 @@ describe('versus protocol', () => {
     expect(slugHandle('Swift Otter')).toBe('swiftotter');
     expect(slugHandle('9 Lives')).toBe('p9lives');
     expect(slugHandle('!!')).toBe('player');
+  });
+
+  it('friendly scoring compares each player with their own best', () => {
+    expect(relativeScore(1240, 1000)).toBe(124);
+    expect(relativeScore(500, 1500)).toBe(33.3);
+    expect(relativeScore(0, 800)).toBe(0);
+    // No best yet: this run is the baseline.
+    expect(relativeScore(300, 0)).toBe(100);
+    expect(relativeScore(300, undefined)).toBe(100);
+    expect(relativeScore(0, 0)).toBe(0);
+    expect(relativeScore(1e9, 1)).toBe(999.9);
+    // A newcomer at 120% of their best beats a veteran at 90% of theirs, despite the raw scores.
+    const newcomer = { score: 600, best: 500 };
+    const veteran = { score: 4500, best: 5000 };
+    expect(rankValue('friendly', newcomer)).toBeGreaterThan(rankValue('friendly', veteran));
+    expect(rankValue('standard', newcomer)).toBeLessThan(rankValue('standard', veteran));
+    expect(rankValue(undefined, veteran)).toBe(4500);
+  });
+
+  it('async challenge outcomes', () => {
+    expect(asyncOutcome(1240, 1300)).toBe('won');
+    expect(asyncOutcome(1240, 1240)).toBe('draw');
+    expect(asyncOutcome(1240, 900)).toBe('lost');
   });
 });

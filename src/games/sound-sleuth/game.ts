@@ -410,7 +410,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       if (!alive) return;
 
       status.text = tr.kind === 'pair' ? t.ask2 : t.ask3;
-      ctx.announce(status.text);
+      ctx.announce(
+        tr.kind === 'pair'
+          ? `${status.text} Left arrow or S for same, right arrow or D for different.`
+          : `${status.text} Press 1, 2 or 3.`,
+      );
       accepting = true;
       btns.forEach((b) => drawBtn(b, 'idle'));
       const t0 = ctx.time();
@@ -461,6 +465,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
             ? `${t.diff}: ${tr.words[0]} · ${tr.words[1]}`
             : `${t.same}: ${tr.words[0]} · ${tr.words[1]}`;
       ctx.caption(verdict.text);
+      ctx.announce(`${ok ? 'Right' : 'Not quite'}. ${verdict.text}.${ok && streak >= 3 ? ` Streak ${streak}.` : ''}`);
       await openShells(tr);
       if (ok) shells.forEach((s) => particles.burst(s.c.x, s.c.y - shellR * 0.15, 8, { color: 0xfff6ec, speed: 90, life: 0.6 }));
       stair.record(ok);

@@ -12,6 +12,8 @@ const STONE_R = [0.6, 0.53, 0.47, 0.42, 0.38];
 const H = 0.5; // stone thickness (stack step)
 const PILLAR_Z = 0.9;
 const SESSION = 6;
+/** Spoken names of the engraved symbols (see symbolTexture), largest stone first. */
+const STONE_NAMES = ['ring', 'triangle', 'square', 'star', 'diamond'];
 
 // ---------------------------------------------------------------- view-model
 
@@ -107,6 +109,38 @@ export default function create(ctx: GameContext): GameInstance {
     });
   }
 
+  // ---- screen-reader descriptions (never in preview)
+  const say = (text: string) => {
+    if (!preview && alive) ctx.announce(text);
+  };
+  let focus = 0; // keyboard-focused pillar (arrow keys)
+  const name = (id: number) => STONE_NAMES[id] ?? `stone ${id + 1}`;
+  function describePillar(st: State, i: number): string {
+    const p = st[i];
+    const cap = view.caps[i];
+    return `Pillar ${i + 1}, ${p.length} of ${cap}: ${p.length ? p.map(name).join(', ') : 'empty'}`;
+  }
+  const describeState = (st: State) => st.map((_, i) => describePillar(st, i)).join('. ') + '.';
+  function matchSummary(): string {
+    // only while the pool can be seen — the misted levels are a memory challenge
+    if (view.mistTarget > 0) return '';
+    const ok = view.state.filter((p, i) => p.join(',') === view.goal[i].join(',')).length;
+    return ` ${ok} of ${view.caps.length} pillars match the pool.`;
+  }
+  function describeBoard(): string {
+    const goal = view.mistTarget > 0 ? 'The pool is misted over.' : `Pool: ${describeState(view.goal)}`;
+    const held = view.held ? ` Holding the ${name(view.held.id)} from pillar ${view.held.from + 1}.` : '';
+    return `Stones listed bottom to top. Now: ${describeState(view.state)} ${goal}${held}`;
+  }
+  function moveFocus(d: number) {
+    if (!accepting) return;
+    const n = view.caps.length;
+    focus = (focus + d + n) % n;
+    view.pillarFlash[focus] = Math.max(view.pillarFlash[focus], 0.35);
+    ctx.audio.tick();
+    say(describePillar(view.state, focus) + '.');
+  }
+
   function stoneTone(id: number, gain = 0.12) {
     // singing-bowl-ish: sine body + bell partial; larger stones sing lower
     const f = bowl(4 - id + 2);
@@ -173,10 +207,12 @@ export default function create(ctx: GameContext): GameInstance {
       if (!s[i].length) {
         ctx.audio.thunk({ gain: 0.12 });
         view.pillarFlash[i] = 0.6;
+        say(`Pillar ${i + 1} is empty.`);
         return;
       }
       const id = s[i][s[i].length - 1];
       view.held = { id, from: i };
+      say(`Lifted the ${name(id)} from pillar ${i + 1}.`);
       if (firstMoveAt < 0) firstMoveAt = ctx.time();
       woodLift();
       ctx.haptics.tick();
@@ -186,6 +222,7 @@ export default function create(ctx: GameContext): GameInstance {
     const { id, from } = view.held;
     if (i === from) {
       view.held = null;
+      say(`Put the ${name(id)} back on pillar ${from + 1}.`);
       await animateTo(id, slotPos(from, s[from].length - 1, view.caps.length, tmpA), 170);
       stoneClick();
       return;
@@ -194,6 +231,7 @@ export default function create(ctx: GameContext): GameInstance {
       ctx.audio.thunk({ gain: 0.18 });
       ctx.haptics.error();
       ctx.caption('That pillar is full');
+      say(`Pillar ${i + 1} is full.`);
       view.wobble[id] = 1;
       view.pillarFlash[i] = 1;
       return;
@@ -203,6 +241,8 @@ export default function create(ctx: GameContext): GameInstance {
     view.held = null;
     moves++;
     hud();
+    if (keyOf(view.state) !== keyOf(view.goal))
+      say(`The ${name(id)} to pillar ${i + 1}. ${describePillar(view.state, i)}. Move ${moves}, minimum ${puzzle.min}.${matchSummary()}`);
     const n = view.caps.length;
     await animateTo(id, hoverPos(i, view, tmpA), 300, 0.5);
     await animateTo(id, slotPos(i, view.state[i].length - 1, n, tmpB), 170, 0, (t) => t * t);
@@ -224,15 +264,20 @@ export default function create(ctx: GameContext): GameInstance {
         const { id, from } = view.held;
         view.held = null;
         await animateTo(id, slotPos(from, view.state[from].length - 1, view.caps.length, tmpA), 170);
+        say(`Put the ${name(id)} back on pillar ${from + 1}.`);
         return;
       }
       const prev = history.pop();
-      if (!prev) return;
+      if (!prev) {
+        say('Nothing to undo.');
+        return;
+      }
       undoUsed = true;
       moves = Math.max(0, moves - 1);
       view.state = prev;
       ctx.audio.noise({ dur: 0.25, filter: 700, sweepTo: 300, gain: 0.05 });
       ctx.caption('Undo');
+      say(`Undone. Move ${moves}. ${describeState(view.state)}`);
       hud();
       await settleAll(220);
     });
@@ -249,6 +294,7 @@ export default function create(ctx: GameContext): GameInstance {
       view.state = clone(puzzle!.start);
       ctx.audio.noise({ dur: 0.4, filter: 500, sweepTo: 1200, gain: 0.05 });
       ctx.caption('Puzzle reset');
+      say(`Puzzle reset. ${describeState(view.state)}`);
       hud();
       await settleAll(320);
     });
@@ -353,7 +399,10 @@ export default function create(ctx: GameContext): GameInstance {
     await Promise.all(jobs);
     if (!alive) return;
     hud();
-    ctx.announce(`Puzzle ${done + 1} of ${SESSION}. Match the pool in ${puzzle.min} moves.${def.hidden ? ' The pool will mist over in 5 seconds.' : ''}`);
+    focus = 0;
+    say(
+      `Puzzle ${done + 1} of ${SESSION}. Match the pool in ${puzzle.min} moves.${def.hidden ? ' The pool will mist over in 5 seconds.' : ''} ${describeBoard()} Press D to hear the stones again.`,
+    );
     puzzleShownAt = ctx.time();
     accepting = true;
     if (def.hidden) {
@@ -363,6 +412,7 @@ export default function create(ctx: GameContext): GameInstance {
         view.mistTarget = 1;
         ctx.audio.noise({ dur: 1.2, filter: 400, sweepTo: 900, gain: 0.05 });
         ctx.caption('The pool is misted over');
+        say('The pool is misted over.');
       });
     }
     const solved = new Promise<void>((res) => (solvedResolve = res));
@@ -459,7 +509,17 @@ export default function create(ctx: GameContext): GameInstance {
     mkBtn('⟲ Reset', 'Reset puzzle', 'right', reset);
   }
 
-  const keyMap: Record<string, () => void> = { KeyZ: undo, KeyR: reset, Escape: putBack, Backspace: undo };
+  const keyMap: Record<string, () => void> = {
+    KeyZ: undo,
+    KeyR: reset,
+    Escape: putBack,
+    Backspace: undo,
+    KeyD: () => accepting && say(describeBoard()),
+    ArrowLeft: () => moveFocus(-1),
+    ArrowRight: () => moveFocus(1),
+    Enter: () => tapPillar(focus),
+    Space: () => tapPillar(focus),
+  };
   for (let i = 0; i < 4; i++) {
     keyMap[`Digit${i + 1}`] = () => tapPillar(i);
     keyMap[`Numpad${i + 1}`] = () => tapPillar(i);

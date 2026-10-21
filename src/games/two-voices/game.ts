@@ -397,6 +397,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     drawCard(cd, cd.selected ? 'sel' : 'idle');
     ctx.audio.tick();
     picks = cards.map((c, k) => (c.selected ? k : -1)).filter((k) => k >= 0);
+    if (picks.length < need) ctx.announce(`${cd.word} ${cd.selected ? 'chosen' : 'unchosen'}, ${need - picks.length} more to pick`);
     if (picks.length >= need) {
       accepting = false;
       resolvePick?.(picks);
@@ -467,7 +468,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         first = false;
         tip.text = UI[lang].tip;
         tip.alpha = 1;
-        if (seqMode && !preview) ctx.caption(UI[lang].seq);
+        if (seqMode && !preview) {
+          ctx.caption(UI[lang].seq);
+          ctx.announce(UI[lang].seq);
+        }
         await ctx.wait(preview ? 900 : 2000);
         void tween(ctx, 600, (k) => (tip.alpha = 1 - k));
       } else {
@@ -520,11 +524,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         ctx.haptics.success();
         chosen.forEach((i) => particles.burst(cards[i].c.x, cards[i].c.y, 18, { color: hex(pal.highlight), speed: 180, life: 0.7 }));
         status.text = lang === 'hi-IN' ? 'बढ़िया' : 'NICELY CAUGHT';
+        ctx.announce(`Right. Left said ${a}, right said ${b}. Score ${score}`);
       } else {
         ctx.audio.thunk({ gain: 0.2 });
         ctx.haptics.error();
         ctx.caption(`Left said “${a}”, right said “${b}”`);
         status.text = lang === 'hi-IN' ? 'लगभग' : 'ALMOST';
+        ctx.announce(`Not quite. Left said ${a}, right said ${b}`);
       }
       stair.record(ok);
       if (preview && stair.level > 3) stair.set(1);

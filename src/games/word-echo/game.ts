@@ -3,7 +3,7 @@ import type { GameContext, GameInstance, VoiceLang } from '@/sdk';
 import { clamp, easeOutBack, hex, mixHex, tween } from '@/sdk';
 import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
 import { createLangToggle } from '@/sdk/voiceui';
-import { WORDS } from './content';
+import { BACKWARDS_CUE, WORDS } from './content';
 
 const FONT = '"Geist Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 const TRIALS = 10;
@@ -268,6 +268,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       ctx.audio.pluck(note(progress), { gain: 0.18 });
       ctx.haptics.tick();
       particles.burst(t.c.x, t.c.y, 10, { color: hex(pal.accent), speed: 140, life: 0.5 });
+      if (progress < expected.length) ctx.announce(`${t.word}, ${progress} of ${expected.length}`);
       if (progress >= expected.length) {
         accepting = false;
         resolveInput?.(true);
@@ -278,6 +279,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       ctx.audio.thunk({ gain: 0.22 });
       ctx.haptics.error();
       ctx.caption('Not that one');
+      wrongWord = t.word;
       // show the correct remaining order
       expected.slice(progress).forEach((idx, k) => {
         ctx.after(250 + k * 220, () => {
@@ -293,7 +295,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     progress = 0;
     accepting = true;
     status.text = reverse ? '↺  TAP THEM BACKWARDS' : 'YOUR TURN';
-    ctx.announce(`Your turn: ${expected.length} words${reverse ? ', backwards' : ''}`);
+    ctx.announce(`Your turn: ${expected.length} words${reverse ? ', backwards' : ''}. Keys: ${tileList()}`);
     setReplay(!preview && !replayed);
     return new Promise((res) => {
       resolveInput = (ok) => {
@@ -310,6 +312,26 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       if (!accepting) return;
       tap(rng.chance(0.07) ? (expected[progress] + 1) % tiles.length : expected[progress]);
     }
+  }
+
+  /** Spoken key map for players who can't see the cards, e.g. "1 moon, 2 river". */
+  function tileList() {
+    return tiles.map((t, i) => `${i + 1} ${t.word}`).join(', ');
+  }
+  let speakingKeys = false;
+  let wrongWord = '';
+  async function speakKeys() {
+    if (!accepting || speakingKeys) return;
+    speakingKeys = true;
+    if (ctx.voice.source() === 'none') {
+      ctx.announce(`Keys: ${tileList()}`);
+      speakingKeys = false;
+      return;
+    }
+    for (let i = 0; i < tiles.length && accepting && alive; i++) {
+      await Promise.race([ctx.voice.speak(`${i + 1}, ${tiles[i].word}`, { lang }), ctx.wait(2600)]);
+    }
+    speakingKeys = false;
   }
 
   async function replay() {
@@ -345,11 +367,16 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       const seqIdx = rng.shuffle([...Array(tileCount).keys()]).slice(0, len);
       seqWords = seqIdx.map((i) => words[i]);
       expected = reverse ? [...seqIdx].reverse() : seqIdx;
-      ctx.voice.prefetch(seqWords, { lang });
+      ctx.voice.prefetch(reverse ? [BACKWARDS_CUE[lang], ...seqWords] : seqWords, { lang });
       setTiles(words);
       hud();
       if (reverse) ctx.caption('Backwards round');
       await ctx.wait(ctx.voice.source() === 'sarvam' ? 900 : 600);
+      if (reverse && !preview) {
+        await Promise.race([ctx.voice.speak(BACKWARDS_CUE[lang], { lang }), ctx.wait(1600)]);
+        await ctx.wait(400);
+        if (!alive) return;
+      }
       await present();
       if (!alive) return;
       const p = waitInput();
@@ -366,9 +393,12 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         ctx.haptics.success();
         particles.burst(orbX, orbY, 50, { color: hex(pal.highlight), speed: 260, life: 1 });
         status.text = 'BEAUTIFUL';
+        ctx.announce(`All ${len} in order. Score ${score}`);
       } else {
         lives--;
         status.text = 'ALMOST';
+        const order = expected.map((idx) => tiles[idx].word).join(', ');
+        ctx.announce(`Not ${wrongWord}. The order was ${order}. ${lives > 0 ? `${lives} ${lives === 1 ? 'life' : 'lives'} left` : 'No lives left'}`);
       }
       stair.record(ok);
       if (preview && stair.level > 3) stair.set(2);
@@ -416,7 +446,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ctx.caption(l === 'hi-IN' ? 'Hindi from the next list' : 'English from the next list');
   });
 
-  const keyMap: Record<string, () => void> = { KeyR: () => void replay() };
+  const keyMap: Record<string, () => void> = { KeyR: () => void replay(), KeyT: () => void speakKeys() };
   for (let i = 0; i < 9; i++) {
     keyMap[`Digit${i + 1}`] = () => tap(i);
     keyMap[`Numpad${i + 1}`] = () => tap(i);

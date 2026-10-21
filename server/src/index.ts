@@ -1,13 +1,13 @@
 // Utopia Versus worker: routes HTTP + WebSocket traffic to two Durable Objects.
 //   GET  /lobby            WebSocket: presence, live matches, matchmaking, leaderboard   (Lobby, one global instance)
 //   GET  /match/:code      WebSocket: one room (1v1 duel or party of up to 8)           (Match, one per room code)
-//   POST /rooms            Create a private duel / party room → { code }
+//   POST /rooms            Create a private duel / party room {kind, pid, gameId?, public?, mode?} → { code }
 //   GET  /ghost/:gameId    A recorded run to race against when nobody is online
 //   GET  /leaders          Top ratings
 //   …plus the social/admin API in api.ts (profiles, @handles, friends, challenges)
 import { Lobby } from './lobby';
 import { Match } from './match';
-import { isRoomCode, PARTY_MAX, type RoomKind } from '../../src/platform/versus/protocol';
+import { isRoomCode, isScoreMode, PARTY_MAX, type RoomKind } from '../../src/platform/versus/protocol';
 import { lobbyOf, matchOf, PID_RE, type Env } from './util';
 import { handleApi } from './api';
 import { authenticate } from './db';
@@ -58,7 +58,7 @@ export default {
     }
 
     if (path === '/rooms' && req.method === 'POST') {
-      let body: { kind?: RoomKind; pid?: string; gameId?: string | null; public?: boolean };
+      let body: { kind?: RoomKind; pid?: string; gameId?: string | null; public?: boolean; mode?: string };
       try {
         body = await req.json();
       } catch {
@@ -73,6 +73,7 @@ export default {
         code,
         kind,
         ranked: false,
+        mode: isScoreMode(body.mode) ? body.mode : 'standard',
         public: kind === 'party' && !!body.public,
         host: body.pid,
         gameId,

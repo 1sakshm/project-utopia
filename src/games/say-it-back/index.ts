@@ -26,9 +26,10 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
       notes: [
+        'Playable by sound alone: the phrase is spoken, your turn is announced, and the match, the phrase itself, score and level changes are read after each answer',
         'With captions on, the phrase is shown while it is spoken and again after you answer',
         'Answer by speaking or by typing',
         'No time limit when answering',

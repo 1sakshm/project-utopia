@@ -14,6 +14,7 @@ export default defineGame({
       keyboard: [
         ['← / A', 'Left portal'],
         ['→ / D', 'Right portal'],
+        ['R', 'Repeat the crystal and portals'],
       ],
     },
     abilities: { primary: 'cognitive-flexibility', secondary: ['pattern-recognition', 'inhibition'] },
@@ -32,6 +33,8 @@ export default defineGame({
         'No time limit on any crystal',
         'High contrast: white crystals with bold dark patterns',
         'Discovering the unstated rule is the game itself',
+        'Screen reader: each crystal is described (count, pattern, shape, tilt when in play), the two portal examples are read whenever they change, and the rule glyph is named',
+        'Every sort is announced (portal lights up / not this portal); R repeats the crystal and portals',
       ],
     },
     palette: { bg: '#0a0818', bg2: '#1c1636', accent: '#a58bff', accent2: '#5ff2d6', highlight: '#ffe3a3' },

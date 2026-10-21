@@ -220,3 +220,27 @@ export function makeTrial(rng: Rng, level: number, count: number, absent: boolea
   if (mode === 'rotated') for (const it of items) it.rot = rng.int(0, 3);
   return { target, present, items, targetIndex, mode };
 }
+
+// ---------------------------------------------------------------- screen-reader descriptions
+const NODE_NAME = ['top-left', 'top', 'top-right', 'left', 'centre', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+
+/** Rotate a glyph by `quarter` clockwise quarter-turns (screen space, y down) — how the field displays it. */
+export function turned(g: Glyph, quarter: number): Glyph {
+  let r = g;
+  for (let i = 0; i < ((quarter % 4) + 4) % 4; i++) r = rot90(r);
+  return r;
+}
+
+/**
+ * Plain-words description of a rune as drawn, e.g. "top-left to centre, centre to right, ring at top".
+ * Identical glyphs always produce identical text (features are sorted), so matching by ear is exact.
+ */
+export function describeGlyph(g: Glyph): string {
+  const parts: string[] = [];
+  const rings: string[] = [];
+  for (const id of [...g].sort((a, b) => a - b)) {
+    if (id >= RING0) rings.push(`ring at ${NODE_NAME[id - RING0]}`);
+    else parts.push(`${NODE_NAME[EDGES[id][0]]} to ${NODE_NAME[EDGES[id][1]]}`);
+  }
+  return [...parts, ...rings].join(', ');
+}

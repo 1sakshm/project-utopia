@@ -70,4 +70,14 @@ export function pickNewRule(rng: Rng, dims: number[], current: number): number {
   return opts.length ? rng.pick(opts) : current;
 }
 
+const SHAPE_WORDS = ['pyramid', 'cube', 'diamond'];
+const PATTERN_WORDS = ['smooth', 'striped', 'dotted'];
+
+/** Short spoken description of a crystal for screen readers, e.g. "2 striped cubes, tilted". Tilt is named only when it is in play. */
+export function describeSpec(s: Spec, dims: number[]): string {
+  const n = s[1] + 1;
+  const text = `${n} ${PATTERN_WORDS[s[2]]} ${SHAPE_WORDS[s[0]]}${n > 1 ? 's' : ''}`;
+  return dims.includes(3) ? `${text}, ${s[3] ? 'tilted' : 'upright'}` : text;
+}
+
 export const streakMult = (streak: number) => 1 + Math.min(4, Math.floor(streak / 4)) * 0.5;

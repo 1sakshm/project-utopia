@@ -14,6 +14,7 @@ import { formatScore } from '../components/Common';
 import Wallet from '../components/Wallet';
 import { NameSheet } from '../components/NameSheet';
 import { AccountPanel } from '../components/AccountPanel';
+import { GrowthSection, StarterCard } from '../components/Growth';
 
 const relTime = (t: number) => {
   const m = Math.round((Date.now() - t) / 60000);
@@ -116,6 +117,10 @@ export default function You() {
       </div>
 
       <AccountPanel />
+
+      <StarterCard compact />
+
+      <GrowthSection />
 
       <Quests />
 

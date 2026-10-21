@@ -515,6 +515,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ribbonTint = sim >= PERFECT ? hex(pal.accent) : sim >= CLOSE ? hex(pal.highlight) : 0xff9fc0;
   }
 
+  /** Spoken level change after a phrase, e.g. " Next level: Short phrases." ('' when unchanged). */
+  function levelNote(before: number) {
+    return stair.level !== before ? ` Next level: ${LEVEL_NAMES[stair.level - 1]}.` : '';
+  }
+
   function hud() {
     ctx.hud.set({ score, level: stair.level, progress: asked / PROMPT_COUNT, label: LEVEL_NAMES[stair.level - 1] });
   }
@@ -561,18 +566,18 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
         ctx.haptics.success();
         particles.burst(cx, ribY, 50, { color: hex(pal.highlight), speed: 260, life: 1 });
         stair.record(true);
-        ctx.announce(`Perfect! ${Math.round(sim * 100)} percent match.`);
+        ctx.announce(`Perfect! ${Math.round(sim * 100)} percent match. Score ${score}.${levelNote(level)}`);
       } else if (sim >= CLOSE) {
         longest = Math.max(longest, n);
         score += Math.round(10 * level * mult);
         ctx.audio.bell(note(4), { gain: 0.08 });
         ctx.haptics.tick();
-        ctx.announce(`Close: ${Math.round(sim * 100)} percent match. It was: ${current}`);
+        ctx.announce(`Close: ${Math.round(sim * 100)} percent match. It was: ${current}. Score ${score}.`);
       } else {
         ctx.audio.thunk({ gain: 0.18 });
         ctx.haptics.error();
         stair.record(false);
-        ctx.announce(`${Math.round(sim * 100)} percent match. It was: ${current}`);
+        ctx.announce(`${heard ? `${Math.round(sim * 100)} percent match` : 'Nothing heard'}. It was: ${current}.${levelNote(level)}`);
       }
       if (preview && stair.level > 3) stair.set(2);
       hud();

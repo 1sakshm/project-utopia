@@ -24,8 +24,61 @@ export const RING_EMOJI: Record<RingId, string> = {
 
 const ringOf = (id: string) => ABILITY_RING[GAME_BY_ID[id].manifest.abilities.primary];
 
+/** Weekly rotation starts here (a Monday), so nobody's Today's 3 changes mid-day when this ships. */
+export const WEEKLY_TRIO_FROM = '2026-10-26';
+
+const scoredIds = () => GAMES.map((g) => g.manifest.id).filter((id) => GAME_BY_ID[id].manifest.showScore !== false);
+
+/** Monday (UTC) of the week containing `day`, as YYYY-MM-DD. */
+export function weekOf(day: string): string {
+  const d = new Date(day + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The week's 21 slots (7 days × 3) cycle through shuffled families, so every scored family comes up at least twice
+ * a week, and no day repeats a family. Within a family, games rotate so the same game doesn't come back that week
+ * if the family has another.
+ */
+export function weekTrios(monday: string): string[][] {
+  const rng = createRng(hashString('week:' + monday));
+  const fams = [...new Set(scoredIds().map(ringOf))];
+  const seq: RingId[] = [];
+  while (seq.length < 28) seq.push(...rng.shuffle([...fams])); // spare cycle so the last day can always pick 3 distinct
+  const days: RingId[][] = [];
+  for (let d = 0; d < 7; d++) {
+    const day: RingId[] = [];
+    while (day.length < 3) day.push(seq.splice(seq.findIndex((f) => !day.includes(f)), 1)[0]);
+    days.push(day);
+  }
+  const pools = new Map(fams.map((f) => [f, rng.shuffle(scoredIds().filter((id) => ringOf(id) === f))]));
+  const used = new Map(fams.map((f) => [f, 0]));
+  return days.map((day) =>
+    day.map((f) => {
+      const pool = pools.get(f)!;
+      const n = used.get(f)!;
+      used.set(f, n + 1);
+      return pool[n % pool.length];
+    }),
+  );
+}
+
+/** Families played this week (UTC, Monday on), out of the scored families that Today's 3 rotates through. */
+export function weekFamilies(history: Array<{ gameId: string; t: number }>, day = utcToday()) {
+  const from = Date.parse(weekOf(day));
+  const all = [...new Set(scoredIds().map(ringOf))];
+  const seen = new Set(history.filter((h) => h.t >= from && GAME_BY_ID[h.gameId]).map((h) => ringOf(h.gameId)));
+  return { played: all.filter((f) => seen.has(f)), all };
+}
+
 /** Three games from three different ability families, identical for everyone on a given UTC day. */
 export function todayTrio(day = utcToday()): string[] {
+  if (day >= WEEKLY_TRIO_FROM) {
+    const monday = weekOf(day);
+    const idx = Math.round((Date.parse(day) - Date.parse(monday)) / 864e5);
+    return weekTrios(monday)[idx];
+  }
   const rng = createRng(hashString('trio:' + day));
   const pool = rng.shuffle(GAMES.map((g) => g.manifest.id).filter((id) => GAME_BY_ID[id].manifest.showScore !== false));
   const out: string[] = [];

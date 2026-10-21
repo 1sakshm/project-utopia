@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useSettings, prefersReducedMotion, type Settings as S } from '@/platform/settings';
 import { useProgress } from '@/platform/progress';
+import { historyCsv, shareOrDownload } from '@/platform/exportCsv';
 import { useEconomy, AD_DAILY_CAP } from '@/platform/economy';
 import { ADS_ENABLED } from '@/platform/adsConfig';
 import { track } from '@/platform/analytics';
@@ -147,6 +148,7 @@ export default function Settings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pendingImport, setPendingImport] = useState<null | { data: ImportData; label: string }>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [csvMsg, setCsvMsg] = useState<string | null>(null);
   useReveal(root);
   useEffect(() => {
     const on = () => setCanInstall(true);
@@ -168,6 +170,12 @@ export default function Settings() {
     a.download = `utopia-data-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  async function exportCsv() {
+    const history = useProgress.getState().history;
+    const res = await shareOrDownload(historyCsv(history), `utopia-sessions-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    if (res !== 'cancelled') setCsvMsg(`${history.length} session${history.length === 1 ? '' : 's'} ${res === 'shared' ? 'shared' : 'saved'}.`);
   }
 
   async function pickImport(file: File | undefined) {
@@ -395,6 +403,11 @@ export default function Settings() {
         <ActionRow label="Your data stays on this device" desc="Progress is stored locally. Export it any time.">
           <button className="btn" onClick={exportData}>
             Export JSON
+          </button>
+        </ActionRow>
+        <ActionRow label="Session history (CSV)" desc={csvMsg ?? 'One row per game you finished: date, game, ability family, score and level. Opens in any spreadsheet.'}>
+          <button className="btn" onClick={exportCsv}>
+            Export CSV
           </button>
         </ActionRow>
         <ActionRow label="Import from a file" desc={importMsg ?? (pendingImport ? `Replace everything on this device with ${pendingImport.label}?` : 'Restore progress from an exported JSON file, e.g. on a new phone.')}>

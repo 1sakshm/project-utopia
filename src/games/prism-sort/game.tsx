@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, damp, easeOutCubic } from '@/sdk';
 import { mountR3F, useGame, GameEffects, GradientSky, Motes, ParticleBurst, softDotTexture, type BurstHandle } from '@/sdk/r3f';
-import { DIM_NAMES, TRIALS, levelDef, makeExamples, makeCrystal, portalFor, pickNewRule, streakMult, type Spec } from './logic';
+import { DIM_NAMES, TRIALS, describeSpec, levelDef, makeExamples, makeCrystal, portalFor, pickNewRule, streakMult, type Spec } from './logic';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { clay, puckGeometry, shade } from './soft';
 
@@ -74,6 +74,32 @@ export default function create(ctx: GameContext): GameInstance {
   let cueRule = -1;
   let stopAmbient: (() => void) | null = null;
 
+  // Screen reader: portals are re-read whenever their example crystals change; the glyph is named when it appears/goes.
+  let srDims: number[] = [];
+  let srPortalsDirty = true;
+  let srCue = -1;
+  let srHint = false;
+
+  function portalsText() {
+    return `Left portal: ${describeSpec(view.examples[0], srDims)}. Right portal: ${describeSpec(view.examples[1], srDims)}.`;
+  }
+
+  function crystalText() {
+    return view.crystal ? `Crystal: ${describeSpec(view.crystal, srDims)}.` : '';
+  }
+
+  function announceCrystal() {
+    const parts: string[] = [];
+    if (srPortalsDirty) parts.push(portalsText());
+    srPortalsDirty = false;
+    if (view.cue !== srCue) parts.push(view.cue >= 0 ? `Glyph: sort by ${DIM_NAMES[view.cue]}.` : 'Glyph gone: back to the hidden rule.');
+    srCue = view.cue;
+    parts.push(crystalText());
+    if (!srHint) parts.push('Left or right arrow sends it. R repeats.');
+    srHint = true;
+    ctx.announce(parts.join(' '));
+  }
+
   let accepting = false;
   let resolveChoice: ((side: 0 | 1) => void) | null = null;
 
@@ -127,6 +153,8 @@ export default function create(ctx: GameContext): GameInstance {
         dimsKey = key;
         view.examples = makeExamples(rng, def.dims);
         view.exKey++;
+        srDims = def.dims;
+        srPortalsDirty = true;
         if (!def.dims.includes(rule)) {
           prevRule = rule;
           rule = pickNewRule(rng, def.dims, rule);
@@ -154,6 +182,7 @@ export default function create(ctx: GameContext): GameInstance {
       ctx.audio.tone(note(0) / 2, { dur: 0.25, gain: 0.04, type: 'sine' });
       await ctx.wait(view.anim.dur);
       if (!alive) return;
+      announceCrystal();
       const choiceP = waitChoice();
       if (preview) void ghost(activeRule, cued);
       const side = await choiceP;
@@ -237,6 +266,7 @@ export default function create(ctx: GameContext): GameInstance {
       ctx.audio.bell(f * 2, { gain: 0.04, dur: 1.6 });
       ctx.haptics.tick();
       burstRef.current?.burst([side ? PORTAL_X : -PORTAL_X, PORTAL_Y, 0.2], 36, { color: PORTAL_COLORS[side], speed: 2, life: 1 });
+      ctx.announce(`${side ? 'Right' : 'Left'} portal lights up${streak >= 2 ? `, streak ${streak + 1}` : ''}.`);
     } else {
       view.dim[side] = 1;
       ctx.audio.tone(2300, { dur: 0.09, gain: 0.05, type: 'sine', pan: side ? 0.5 : -0.5 });
@@ -244,6 +274,7 @@ export default function create(ctx: GameContext): GameInstance {
       ctx.audio.thunk({ gain: 0.12 });
       ctx.haptics.error();
       ctx.caption('Glassy tink: not this portal');
+      ctx.announce(`Not the ${side ? 'right' : 'left'} portal.`);
     }
     await ctx.wait(ok ? 200 : rm ? 150 : 540);
   }
@@ -270,6 +301,11 @@ export default function create(ctx: GameContext): GameInstance {
     KeyA: () => choose(0),
     ArrowRight: () => choose(1),
     KeyD: () => choose(1),
+    KeyR: () => {
+      if (!view.crystal) return;
+      const cue = view.cue >= 0 ? ` Glyph: sort by ${DIM_NAMES[view.cue]}.` : '';
+      ctx.announce(`${crystalText()}${cue} ${portalsText()}`);
+    },
   });
   let down: { x: number; y: number } | null = null;
   const onDown = (e: PointerEvent) => {

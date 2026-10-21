@@ -11,7 +11,7 @@ import {
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, hex, lerp, tween } from '@/sdk';
 import { createPixiApp, createParticles, glowTexture, gradientTexture, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
-import { EDGES, NODES, RING0, key, levelSpec, makeTrial, randomRune, type Glyph, type Trial } from './logic';
+import { EDGES, NODES, RING0, describeGlyph, key, levelSpec, makeTrial, randomRune, turned, type Glyph, type Trial } from './logic';
 import { causticTexture, rayTexture, vignetteTexture } from './art';
 
 const ROUNDS_TIMED = 3;
@@ -423,6 +423,37 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
 
   const multFor = (s: number) => Math.min(5, 1 + Math.floor(s / 3));
 
+  // ---------------------------------------------------------------- screen-reader text
+  // Runes are described stroke by stroke as drawn (rotated runes are described in their shown orientation), so the
+  // field can be searched by ear one rune at a time. Announcements never fire in preview.
+  let resultPrefix = '';
+  let cancelFocusSay: (() => void) | null = null;
+  function say(text: string) {
+    if (!preview) ctx.announce(text);
+  }
+  const SECTOR_NAME = ['upper left', 'upper middle', 'upper right', 'middle left', 'centre', 'middle right', 'lower left', 'lower middle', 'lower right'];
+  function sectorOf(it: Item) {
+    const col = clamp(Math.floor(it.u * 3), 0, 2);
+    const row = clamp(Math.floor(it.v * 3), 0, 2);
+    return SECTOR_NAME[row * 3 + col];
+  }
+  function sealText() {
+    return trial ? `Seal: ${describeGlyph(trial.target)}.` : '';
+  }
+  function sayFocus() {
+    if (preview || !trial || focus < 0) return;
+    cancelFocusSay?.();
+    // debounce so holding an arrow key doesn't queue a stream of descriptions
+    cancelFocusSay = ctx.after(140, () => {
+      cancelFocusSay = null;
+      if (!trial || focus < 0 || phase !== 'search') return;
+      const it = items[focus];
+      if (!it?.live) return;
+      const ti = trial.items[focus];
+      say(`${describeGlyph(turned(ti.glyph, trial.mode === 'rotated' ? ti.rot : 0))}. ${sectorOf(it)}`);
+    });
+  }
+
   function drawPips() {
     pips.clear();
     const filled = mult >= 5 ? 3 : streak % 3;
@@ -566,6 +597,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     btn.visible = absentEnabled;
     updateHint();
     hud();
+    const extra = trial.mode === 'rotated' ? ' Runes in the field may be turned.' : '';
+    say(`${resultPrefix}${sealText()} ${used} runes.${extra}${absentEnabled ? ' N if it is not here.' : ''}`);
+    resultPrefix = '';
   }
 
   function updateHint() {
@@ -621,6 +655,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ctx.audio.bell(ping(deg + 2), { gain: 0.05, dur: 1.1, when: ctx.audio.now() + 0.06 });
     ctx.haptics.tick();
     ctx.caption(trial.present ? `Found it · ×${mult}` : `Right — not here · ×${mult}`);
+    resultPrefix = `${trial.present ? 'Found it' : 'Right, not here'}, times ${mult}. `;
     floatText(x, y - 26, `+${gained}`, HI);
     if (!trial.present) {
       void tween(ctx, 260, (t) => btn.scale.set(1 + Math.sin(t * Math.PI) * 0.12));
@@ -671,6 +706,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ctx.audio.thunk({ gain: 0.1 });
     ctx.haptics.error();
     ctx.caption(it ? 'Not that one' : 'It is here — keep looking');
+    cancelFocusSay?.();
+    say(it ? 'Not that one' : 'It is here, keep looking');
     hud();
   }
 
@@ -804,6 +841,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       });
       return;
     }
+    say(`${finds} finds so far`);
     await showBanner(`${finds} finds so far`, 600);
     if (alive) await startRound();
   }
@@ -847,7 +885,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     if (phase !== 'search') return;
     const had = focus >= 0 && kbActive;
     ensureFocus();
-    if (!had || focus < 0) return;
+    if (!had || focus < 0) {
+      sayFocus();
+      return;
+    }
     const from = items[focus];
     let best = -1;
     let bestScore = Infinity;
@@ -867,6 +908,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     if (best >= 0) {
       focus = best;
       ctx.audio.tick();
+      sayFocus();
     }
   }
   function sector(idx: number) {
@@ -878,11 +920,13 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const y = rect.y + ((row + 0.5) / 3) * rect.h;
     focus = nearestItem(x, y, 1e9);
     ctx.audio.tick();
+    sayFocus();
   }
   function choose() {
     if (phase !== 'search') return;
     if (!kbActive || focus < 0) {
       ensureFocus();
+      sayFocus();
       return;
     }
     select(focus);
@@ -899,6 +943,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     Space: () => choose(),
     Enter: () => choose(),
     KeyN: () => notHere(),
+    KeyR: () => {
+      if (phase === 'search' || phase === 'intro') say(sealText());
+    },
   };
   const numpad = [7, 8, 9, 4, 5, 6, 1, 2, 3];
   for (let i = 0; i < 9; i++) {
@@ -1045,6 +1092,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     if (sec !== lastHudSec) {
       lastHudSec = sec;
       hud();
+      if (!untimed && (sec === 30 || sec === 10)) say(`${sec} seconds left`);
     }
   }
 

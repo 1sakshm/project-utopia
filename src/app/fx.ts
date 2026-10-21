@@ -1,5 +1,5 @@
 // Screen-space effects on one shared overlay canvas: confetti/spark bursts and orbs flying into the wallet.
-import { prefersReducedMotion } from '@/platform/settings';
+import { prefersReducedMotion, useSettings } from '@/platform/settings';
 
 interface P {
   x: number;
@@ -181,4 +181,15 @@ export function shake(el: Element | null, strength = 8) {
     ],
     { duration: 380, easing: 'ease-out' },
   );
+}
+
+/** UI haptics (phones only; respects the Haptics setting). Kept very short so they read as texture, not alerts. */
+const HAPTIC = { tap: 6, success: [10, 40, 14], celebrate: [12, 50, 12, 50, 24] } as const;
+export function haptic(kind: keyof typeof HAPTIC) {
+  if (!useSettings.getState().haptics) return;
+  try {
+    navigator.vibrate?.(HAPTIC[kind] as number | number[]);
+  } catch {
+    /* ignore */
+  }
 }

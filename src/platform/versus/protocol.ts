@@ -3,6 +3,14 @@
 
 export type RoomKind = 'duel' | 'party';
 export type RoomState = 'lobby' | 'countdown' | 'playing' | 'done';
+/**
+ * How a room decides the winner.
+ *  standard: highest raw score wins (quick matches are always standard and ranked).
+ *  friendly: each score is measured against that player's own personal best on the game (see relativeScore),
+ *            so a newcomer can beat a veteran. Friendly rounds never change ratings.
+ */
+export type ScoreMode = 'standard' | 'friendly';
+export const isScoreMode = (v: unknown): v is ScoreMode => v === 'standard' || v === 'friendly';
 
 export interface PlayerView {
   pid: string;
@@ -23,6 +31,10 @@ export interface PlayerView {
   place?: number;
   /** Rating change from this match (ranked duels only). */
   delta?: number;
+  /** Friendly rooms: the player's personal best on this game before the round (0 = never played it). */
+  best?: number;
+  /** Friendly rooms: this round's score as a percent of `best` (see relativeScore). */
+  rel?: number;
 }
 
 export interface RoomView {
@@ -32,6 +44,8 @@ export interface RoomView {
   public: boolean;
   host: string;
   gameId: string | null;
+  /** Scoring rule (older servers omit it: standard). */
+  mode?: ScoreMode;
   seed: number;
   state: RoomState;
   /** Server epoch ms when play starts (countdown) / must end (playing). */
@@ -51,6 +65,7 @@ export interface MatchSummary {
   ranked: boolean;
   public: boolean;
   gameId: string | null;
+  mode?: ScoreMode;
   state: RoomState;
   players: Array<{ name: string; score: number; done: boolean; rating: number }>;
   max: number;
@@ -106,8 +121,25 @@ export interface InviteView {
   id: string;
   code: string;
   gameId: string | null;
+  mode?: ScoreMode;
   createdAt: number;
   from: { handle: string; name: string; skin: string };
+}
+
+/** "Beat my score": an async challenge to replay the exact same game (same seed, same start level) within 24 h. */
+export interface AsyncChallengeView {
+  id: string;
+  gameId: string;
+  seed: number;
+  startLevel: number;
+  /** The challenger's score to beat. */
+  score: number;
+  createdAt: number;
+  expiresAt: number;
+  replyScore: number | null;
+  repliedAt: number | null;
+  from: { handle: string; name: string; skin: string };
+  to: { handle: string; name: string; skin: string };
 }
 
 // ---------- client → lobby ----------
@@ -123,7 +155,8 @@ export type LobbyOut =
   | { t: 'matches'; matches: MatchSummary[] }
   | { t: 'online'; online: number }
   | { t: 'leaders'; leaders: LeaderRow[]; me?: Record_ }
-  | { t: 'queued'; since: number; waiting: number }
+  /** `gap`: the rating gap currently accepted for your match (null = anyone). */
+  | { t: 'queued'; since: number; waiting: number; gap?: number | null }
   | { t: 'matched'; code: string; gameId: string }
   | { t: 'pong'; now: number }
   /** A friend challenged you. */
@@ -138,17 +171,19 @@ export type MatchIn =
   | { t: 'ready'; ready: boolean }
   | { t: 'pick'; gameId: string }
   | { t: 'start' }
-  | { t: 'score'; s: number; l: number }
-  | { t: 'done'; s: number; l: number }
+  /** `b`: the player's personal best on this game before the round (used by friendly rooms). */
+  | { t: 'score'; s: number; l: number; b?: number }
+  | { t: 'done'; s: number; l: number; b?: number }
   | { t: 'emote'; e: Emote }
   | { t: 'rematch' }
-  | { t: 'settings'; public: boolean }
+  /** Host only. `mode` can be changed in unranked rooms between rounds. */
+  | { t: 'settings'; public?: boolean; mode?: ScoreMode }
   | { t: 'leave' };
 
 // ---------- match → client ----------
 export type MatchOut =
   | { t: 'room'; room: RoomView; now: number; you: string | null }
-  | { t: 'score'; pid: string; s: number; l: number }
+  | { t: 'score'; pid: string; s: number; l: number; b?: number }
   | { t: 'emote'; pid: string; e: Emote }
   | { t: 'error'; msg: string; fatal?: boolean };
 
@@ -175,4 +210,28 @@ export const START_RATING = 1000;
 export function elo(ra: number, rb: number, score: number, k = 32): number {
   const expected = 1 / (1 + 10 ** ((rb - ra) / 400));
   return Math.round(k * (score - expected));
+}
+
+/**
+ * Friendly scoring: a score as a percent of the player's own personal best (one decimal, capped at 999.9).
+ * Someone who has never played the game (best 0) has no baseline yet, so a scoring run counts as 100%.
+ * Scoring nothing is always 0%.
+ */
+export function relativeScore(score: number, best: number | undefined): number {
+  const s = Math.max(0, Number(score) || 0);
+  const b = Math.max(0, Number(best) || 0);
+  if (s <= 0) return 0;
+  if (b <= 0) return 100;
+  return Math.min(999.9, Math.round((s / b) * 1000) / 10);
+}
+
+/** What decides the order in a room: raw score, or percent of own best in friendly rooms. */
+export const rankValue = (mode: ScoreMode | undefined, p: { score: number; best?: number }) => (mode === 'friendly' ? relativeScore(p.score, p.best) : p.score);
+
+/** Async challenges stay open this long. */
+export const ASYNC_TTL_MS = 24 * 3600_000;
+
+/** Result of an async challenge from the replier's side. */
+export function asyncOutcome(challengeScore: number, replyScore: number): 'won' | 'lost' | 'draw' {
+  return replyScore > challengeScore ? 'won' : replyScore < challengeScore ? 'lost' : 'draw';
 }

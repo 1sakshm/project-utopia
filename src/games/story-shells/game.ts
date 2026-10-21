@@ -431,7 +431,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     question.alpha = 0;
     void tween(ctx, ctx.settings.reducedMotion ? 1 : 300, (k) => (question.alpha = k));
     setCards(items);
-    ctx.announce(`${q.q} ${items.map((it, i) => `${i + 1}: ${it.text}`).join(', ')}`);
+    ctx.announce(`Question ${qi + 1} of 2. ${q.q} ${items.map((it, i) => `${i + 1}: ${it.text}`).join(', ')}`);
     void Promise.race([ctx.voice.speak(q.q, { lang }), ctx.wait(5000)]);
     accepting = true;
     setReplay(!preview && !replayed);
@@ -453,6 +453,17 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     // little "press" so the choice reads in the feed
     await tween(ctx, 180, (k) => cd.c.scale.set(1 - 0.05 * Math.sin(k * Math.PI)));
     choose(pick);
+  }
+
+  /** Speak the choices with their keys (for players who can't see the cards and have no screen reader). */
+  let speakingChoices = false;
+  async function speakChoices() {
+    if (!accepting || speakingChoices) return;
+    speakingChoices = true;
+    for (let i = 0; i < cards.length && accepting && alive; i++) {
+      await Promise.race([ctx.voice.speak(`${i + 1}, ${cards[i].label.text}`, { lang }), ctx.wait(4000)]);
+    }
+    speakingChoices = false;
   }
 
   async function replay() {
@@ -520,6 +531,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
           ctx.haptics.tick();
           particles.burst(cd.c.x + cd.w / 2 - 28, cd.c.y, 18, { color: hex(pal.accent), speed: 160, life: 0.6 });
           pulse = 1;
+          ctx.announce(`Right: ${cd.label.text}`);
         } else {
           bothRight = false;
           drawCard(cd, 'wrong');
@@ -528,6 +540,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
           ctx.audio.thunk({ gain: 0.2 });
           ctx.haptics.error();
           ctx.caption('Not quite. The right card is marked ✓');
+          ctx.announce(`Not quite. The answer was ${good?.label.text ?? ''}`);
         }
         hud();
         await ctx.wait((cd.correct ? 900 : 1600) * (preview ? 1 : ctx.settings.timingMultiplier));
@@ -545,6 +558,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       } else {
         status.text = lang === 'hi-IN' ? 'अगली कहानी' : 'NEXT STORY';
       }
+      if (storiesDone < STORY_COUNT) ctx.announce(`Story ${storiesDone} of ${STORY_COUNT} done. Score ${score}. Next story`);
       hud();
       await setOpen(0, 500);
       if (!preview && storiesDone >= STORY_COUNT) {
@@ -576,7 +590,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     ctx.caption(l === 'hi-IN' ? 'Hindi from the next story' : 'English from the next story');
   });
 
-  const keyMap: Record<string, () => void> = { KeyR: () => void replay() };
+  const keyMap: Record<string, () => void> = { KeyR: () => void replay(), KeyT: () => void speakChoices() };
   for (let i = 0; i < 3; i++) {
     keyMap[`Digit${i + 1}`] = () => choose(i);
     keyMap[`Numpad${i + 1}`] = () => choose(i);

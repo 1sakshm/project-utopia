@@ -21,7 +21,10 @@ import { BOOST_ORB_PRICE } from '@/platform/shop';
 import { ABILITY_RING } from '@/platform/abilities';
 import { nextUp, starText, starsFor, trioStatus, type TrioStatus } from '@/platform/retention';
 import { shareToday } from './shareCard';
-import { burst, burstFrom, flyOrbs } from '../fx';
+import { STARTER_IDS, starterStatus, useStarter, type StarterStatus } from '@/platform/starter';
+import { burst, burstFrom, flyOrbs, haptic } from '../fx';
+import { noteRun } from '@/platform/social';
+import { ChallengeFriend, type AsyncPlay } from './ChallengeFriend';
 
 type Phase = 'loading' | 'boost' | 'howto' | 'versus-wait' | 'countdown' | 'playing' | 'paused' | 'results' | 'error';
 type BoostKind = 'slowmo' | 'secondWind';
@@ -37,7 +40,18 @@ interface ResultInfo {
   starsAfter: number;
   /** Today's 3 progress, when this was one of today's daily games. */
   trio: TrioStatus | null;
+  /** Starter check progress, when this game was part of an active starter check. */
+  starter: StarterStatus | null;
+  recap: Recap;
   nextId: string | null;
+}
+
+/** What changed this session, in one glance: level climbed, score against last time, one stat that improved. */
+interface Recap {
+  startLevel: number;
+  level: number;
+  prevScore: number | null;
+  stat: { label: string; text: string } | null;
 }
 
 /** Versus mode: the room supplies the seed and the start signal; scores stream out; results come from the room. */
@@ -63,7 +77,7 @@ export interface VersusPlay {
   result?: ReactNode;
 }
 
-export default function PlayOverlay({ gameId, daily, versus }: { gameId: string; daily: boolean; versus?: VersusPlay }) {
+export default function PlayOverlay({ gameId, daily, versus, challenge }: { gameId: string; daily: boolean; versus?: VersusPlay; challenge?: AsyncPlay }) {
   const mod = GAME_BY_ID[gameId];
   const m = mod?.manifest;
   const overlay = useRef<HTMLDivElement>(null);
@@ -76,6 +90,7 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
   const hudRef = useRef<HudState>({});
   const [caption, setCaption] = useState<string | null>(null);
   const [result, setResult] = useState<ResultInfo | null>(null);
+  const startLevelRef = useRef(1);
   const [count, setCount] = useState(0);
   const [confirmExit, setConfirmExit] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
@@ -87,7 +102,7 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
   const vs = useRef(versus);
   vs.current = versus;
   const [boosts, setBoosts] = useState<null | Record<BoostKind, boolean>>(() =>
-    !versus && useSettings.getState().showBoostPicker && mod?.manifest.showScore !== false && useProgress.getState().get(gameId).tutorialDone ? null : { slowmo: false, secondWind: false },
+    !versus && !challenge && useSettings.getState().showBoostPicker && mod?.manifest.showScore !== false && useProgress.getState().get(gameId).tutorialDone ? null : { slowmo: false, secondWind: false },
   );
   const assisted = useRef(false);
   const windLoaded = useRef(false);
@@ -137,7 +152,8 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
     assisted.current = boosts.slowmo;
     windLoaded.current = boosts.secondWind;
     const t0 = performance.now();
-    const seed = vs.current ? vs.current.seed : daily ? dailySeed(gameId) : (Math.random() * 2 ** 31) | 0;
+    // An async challenge replays the challenger's exact game: their seed and start level.
+    const seed = vs.current ? vs.current.seed : challenge ? challenge.seed : daily ? dailySeed(gameId) : (Math.random() * 2 ** 31) | 0;
     const onRevive = () => {
       if (windLoaded.current) {
         // A pre-loaded Second Wind kicks in automatically.
@@ -163,9 +179,9 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
       variant: daily ? 'daily' : 'normal',
       seed,
       // Versus rounds start everyone at level 1 so the same seed means the same game.
-      startLevel: vs.current ? 1 : startLevelFor(gameId),
+      startLevel: (startLevelRef.current = vs.current ? 1 : challenge ? challenge.startLevel : startLevelFor(gameId)),
       boost: { slowmo: boosts.slowmo },
-      onRevive: vs.current ? undefined : onRevive,
+      onRevive: vs.current || challenge ? undefined : onRevive,
       onHud: (p) => {
         // Merge outside React's updater so streaming the score (a store update) never happens during render.
         hudRef.current = p ? { ...hudRef.current, ...p } : {};
@@ -191,6 +207,8 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
       },
     });
     host.current = h;
+    // Remember how this run was seeded, so the results screen can send it as a "Beat my score" challenge.
+    if (!vs.current) noteRun({ gameId, seed, startLevel: startLevelRef.current, daily, replyTo: challenge?.id ?? null });
     // DEV-only hooks for end-to-end tests (end a run / offer a second chance without playing it out).
     if (import.meta.env.DEV) (window as unknown as { __utopiaPlay?: object }).__utopiaPlay = { id: gameId, end: (sm: SessionSummary) => finish(sm, h), revive: onRevive };
     h.ready.then(() => {
@@ -323,6 +341,19 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
       }
     }
     const ms = Math.round(h.elapsed());
+    const prev = store.history.find((h) => h.gameId === gameId && !h.assisted) ?? null;
+    const recap: Recap = { startLevel: startLevelRef.current, level: s.levelReached, prevScore: prev && !wasAssisted ? prev.score : null, stat: null };
+    for (const def of prev && !wasAssisted ? m.results : []) {
+      const a = prev!.stats[def.key];
+      const b = s.stats[def.key];
+      if (a === undefined || b === undefined || !def.better || a === b) continue;
+      const gain = def.better === 'higher' ? b - a : a - b;
+      if (gain <= 0) continue;
+      const unit = def.unit ? ` ${def.unit}` : '';
+      const amount = `${formatScore(Math.round(gain * 10) / 10)}${unit}`;
+      recap.stat = { label: def.label, text: def.better === 'lower' ? `${amount} better` : `+${amount}` };
+      break;
+    }
     const starsBefore = starsFor(gameId, prog);
     const trioBefore = trioStatus();
     const patch: Partial<GameProgress> = {
@@ -375,8 +406,14 @@ export default function PlayOverlay({ gameId, daily, versus }: { gameId: string;
     if (trioAfter.complete && !trioBefore.complete) track({ name: 'daily_complete', day: trioAfter.day });
     // Ask the browser to keep our storage (Safari clears script storage after 7 days without a visit otherwise).
     void navigator.storage?.persist?.().catch(() => false);
-    const nextId = trio && !trio.complete ? trio.ids[trio.done.findIndex((d) => !d)] : nextUp(gameId);
-    setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards, starsBefore, starsAfter, trio, nextId });
+    const starterOn = useStarter.getState().active && STARTER_IDS.includes(gameId) && !trio;
+    const starter = starterOn ? starterStatus() : null;
+    if (starter?.complete) {
+      useStarter.getState().stop();
+      track({ name: 'starter_complete' });
+    }
+    const nextId = trio && !trio.complete ? trio.ids[trio.done.findIndex((d) => !d)] : starter && !starter.complete ? starter.next : nextUp(gameId);
+    setResult({ summary: s, isPb, prevBest, statPbs, assisted: wasAssisted, rewards, starsBefore, starsAfter, trio, starter, recap, nextId });
     go('results');
     vs.current?.onDone(s);
     say(`Session complete. ${m.showScore !== false ? `Score ${s.score}.` : ''} ${isPb ? 'New personal best!' : ''}`);
@@ -765,18 +802,20 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
   const delta = s.score - r.prevBest;
   const line = s.message ?? resultLine(r, delta, s.levelReached);
   const nextM = r.nextId ? GAME_BY_ID[r.nextId]?.manifest : null;
-  const trioNext = !!r.trio && !r.trio.complete;
+  const trioNext = (!!r.trio && !r.trio.complete) || (!!r.starter && !r.starter.complete);
   const [shared, setShared] = useState(false);
   const scoreRef = useRef<HTMLDivElement>(null);
   // Celebrate: confetti for a new best or a level-up, a smaller pop for a new star.
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (r.isPb || r.rewards.levelAfter > r.rewards.levelBefore) {
+        haptic('celebrate');
         burstFrom(scoreRef.current, { count: 110, power: 1.1 });
         window.setTimeout(() => burst(innerWidth * 0.2, innerHeight * 0.35, { count: 50, power: 0.8 }), 220);
         window.setTimeout(() => burst(innerWidth * 0.8, innerHeight * 0.35, { count: 50, power: 0.8 }), 380);
         audioEngine.uiPlay();
-      } else if (r.starsAfter > r.starsBefore) burstFrom(scoreRef.current, { count: 40, power: 0.6, colors: ['#ffd23f', '#fff2a8', '#ffffff'] });
+      } else if (r.starsAfter > r.starsBefore || r.recap.level > r.recap.startLevel) haptic('success');
+      if (!r.isPb && r.rewards.levelAfter <= r.rewards.levelBefore && r.starsAfter > r.starsBefore) burstFrom(scoreRef.current, { count: 40, power: 0.6, colors: ['#ffd23f', '#fff2a8', '#ffffff'] });
     }, 450);
     return () => window.clearTimeout(t);
   }, [r]);
@@ -812,6 +851,7 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
           ) : null,
         )}
       </div>
+      <RecapRow m={m} recap={r.recap} score={s.score} />
       <p className="results-line">{line}</p>
       {r.starsAfter > 0 && (
         <p className={`results-stars ${r.starsAfter > r.starsBefore ? 'is-new' : ''}`} aria-label={`${r.starsAfter} of 3 stars${r.starsAfter > r.starsBefore ? ', new star' : ''}`}>
@@ -841,7 +881,18 @@ function Results({ m, r, onAgain, onExit, onNext }: { m: import('@/sdk/types').G
           )}
         </div>
       )}
+      {r.starter && (
+        <div className="results-trio">
+          <span className="results-trio-dots" aria-hidden>
+            {r.starter.done.map((d, i) => (
+              <i key={i} className={d ? 'on' : ''} />
+            ))}
+          </span>
+          <span>{r.starter.complete ? 'Starter check done. Your levels are set; see Growth in You.' : `Starter check · ${r.starter.count} of ${r.starter.ids.length}`}</span>
+        </div>
+      )}
       <RewardsRow rewards={r.rewards} />
+      <ChallengeFriend gameId={m.id} title={m.title} score={s.score} eligible={showScore && !r.assisted} />
       <div className="results-actions">
         {trioNext && nextM ? (
           <button className="btn btn-primary btn-lg" onClick={onNext} autoFocus>
@@ -1085,6 +1136,30 @@ function RewardsRow({ rewards }: { rewards: SessionRewards }) {
       )}
       {rewards.questsCompleted.length > 0 && <p className="fine">Claim quest rewards in You.</p>}
     </>
+  );
+}
+
+function RecapRow({ m, recap, score }: { m: import('@/sdk/types').GameManifest; recap: Recap; score: number }) {
+  const showScore = m.showScore !== false;
+  const chips: Array<{ k: string; v: string; good?: boolean; label: string }> = [];
+  if (showScore && recap.level > 0) {
+    const up = recap.level - recap.startLevel;
+    chips.push({ k: 'lvl', v: `Level ${recap.startLevel} → ${recap.level}`, good: up > 0, label: `Started at level ${recap.startLevel}, reached level ${recap.level}` });
+  }
+  if (showScore && recap.prevScore !== null) {
+    const d = score - recap.prevScore;
+    chips.push({ k: 'vs', v: d === 0 ? 'Same as last time' : `${d > 0 ? '+' : '−'}${formatScore(Math.abs(d))} vs last time`, good: d > 0, label: `${Math.abs(d)} ${d >= 0 ? 'more' : 'fewer'} than last time` });
+  }
+  if (recap.stat) chips.push({ k: 'stat', v: `${recap.stat.label} ${recap.stat.text}`, good: true, label: `${recap.stat.label} improved: ${recap.stat.text}` });
+  if (!chips.length) return null;
+  return (
+    <ul className="recap" aria-label="This session">
+      {chips.map((c, i) => (
+        <li key={c.k} className={c.good ? 'is-good' : ''} style={{ '--i': i } as React.CSSProperties} aria-label={c.label}>
+          {c.v}
+        </li>
+      ))}
+    </ul>
   );
 }
 

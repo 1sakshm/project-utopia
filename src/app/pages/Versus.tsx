@@ -7,7 +7,9 @@ import { useProfile, initials } from '@/platform/profile';
 import { useVersusLive } from '@/platform/versus/live';
 import { useMatch, createRoom, findGhost, secondsUntil } from '@/platform/versus/match';
 import { VERSUS_ENABLED, VERSUS_POOL, ROOM_POOL, randomPoolGame } from '@/platform/versus/config';
-import { EMOTES, EMOTE_LABEL, ROUND_MS, isRoomCode, type MatchSummary, type PlayerView, type RoomView } from '@/platform/versus/protocol';
+import { EMOTES, EMOTE_LABEL, ROUND_MS, isRoomCode, rankValue, relativeScore, type MatchSummary, type PlayerView, type RoomView, type ScoreMode } from '@/platform/versus/protocol';
+import { useProgress } from '@/platform/progress';
+import { useSettings } from '@/platform/settings';
 import { track } from '@/platform/analytics';
 import { navigate, matchPath } from '../router';
 import { formatScore } from '../components/Common';
@@ -57,6 +59,8 @@ function Dashboard() {
   const [busy, setBusy] = useState<null | 'duel' | 'party' | 'ghost'>(null);
   const [err, setErr] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const duelMode = useSocial((s) => s.duelMode);
+  const setDuelMode = useSocial((s) => s.setDuelMode);
 
   useEffect(() => live.retain(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -72,7 +76,7 @@ function Dashboard() {
     setBusy(kind);
     setErr(null);
     try {
-      const c = await createRoom(kind, { gameId: game === 'any' ? randomPoolGame() : game, public: false });
+      const c = await createRoom(kind, { gameId: game === 'any' ? randomPoolGame() : game, public: false, mode: duelMode });
       navigate(`/versus/m/${c}`);
     } catch (e) {
       setErr((e as Error).message);
@@ -164,6 +168,7 @@ function Dashboard() {
                 <Ghost size={16} /> Race a ghost
               </button>
             </div>
+            <ModePicker mode={duelMode} onChange={setDuelMode} />
             <form
               className="row"
               style={{ marginTop: 10 }}
@@ -321,6 +326,7 @@ function ConnState() {
 function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
   const q = useVersusLive((s) => s.queue)!;
   const waiting = useVersusLive((s) => s.queue?.waiting ?? 0);
+  const gap = useVersusLive((s) => s.queue?.gap);
   const cancel = useVersusLive((s) => s.cancelQueue);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -342,6 +348,7 @@ function Queueing({ onGhost, busy }: { onGhost: () => void; busy: boolean }) {
       <p className="fine">
         {q.gameId ? GAME_BY_ID[q.gameId]?.manifest.title : 'Any game'}
         {waiting > 1 ? ` · ${waiting} searching` : ''}
+        {gap !== undefined && (gap === null ? ' · any rating' : ` · rating ±${gap}`)}
       </p>
       <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
         <button
@@ -429,6 +436,7 @@ function LiveRow({ m }: { m: MatchSummary }) {
           {m.state === 'playing' || m.state === 'countdown' ? <span className="chip is-live sm">Live</span> : m.state === 'done' ? 'Finished' : 'Open'}
           {g?.title}
           {m.ranked && ' · Ranked'}
+          {m.mode === 'friendly' && ' · Friendly'}
         </span>
       </span>
       <span className="item-end">
@@ -530,7 +538,8 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
   const shownMe = shownRoom?.players.find((p) => p.pid === st.you) ?? null;
   const showOverlay = !!me && !!g && !!shownRoom && !!shownMe && (inRound || dismissedRound !== shownRoom.round);
   const connected = room.players.filter((p) => p.connected).length;
-  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : 'Duel') : 'Party';
+  const friendly = room.mode === 'friendly';
+  const title = st.ghost ? 'Ghost race' : room.kind === 'duel' ? (room.ranked ? 'Ranked duel' : friendly ? 'Friendly duel' : 'Duel') : friendly ? 'Friendly party' : 'Party';
 
   return (
     <div className="page">
@@ -550,6 +559,8 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           )}
         </div>
       )}
+
+      {friendly && !st.ghost && <FriendlyNote game={g?.title ?? 'this game'} />}
 
       {watching && inRound && <p className="fine" style={{ margin: '12px 0' }}>You’re watching. Scores update live.</p>}
 
@@ -621,6 +632,15 @@ function Room({ code, spectate = false }: { code: string; spectate?: boolean }) 
           <button className="btn btn-primary btn-lg btn-block" onClick={() => st.send({ t: 'rematch' })}>
             <RefreshCw size={16} /> Rematch
           </button>
+        )}
+        {isHost && !room.ranked && !st.ghost && (room.state === 'lobby' || room.state === 'done') && (
+          <label className="toggle-line">
+            <span>
+              Friendly scoring
+              <small>Each player is scored against their own best. Ratings don’t change.</small>
+            </span>
+            <input type="checkbox" className="switch" checked={friendly} onChange={(e) => st.send({ t: 'settings', mode: e.target.checked ? 'friendly' : 'standard' })} />
+          </label>
         )}
         {isHost && room.kind === 'party' && (room.state === 'lobby' || room.state === 'done') && (
           <label className="toggle-line">
@@ -706,8 +726,10 @@ function RoomTop({ title, code, onShare, reconnecting }: { title: string; code: 
 function Standings({ room, you, compact = false }: { room: RoomView; you: string | null; compact?: boolean }) {
   const done = room.state === 'done';
   const live = room.state === 'playing' || room.state === 'countdown';
-  const list = done || live ? [...room.players].sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || b.score - a.score) : room.players;
-  const top = Math.max(1, ...room.players.map((p) => p.score));
+  const friendly = room.mode === 'friendly';
+  const val = (p: PlayerView) => rankValue(room.mode, p);
+  const list = done || live ? [...room.players].sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || val(b) - val(a)) : room.players;
+  const top = Math.max(1, ...room.players.map(val));
   return (
     <ol className={`list standings ${compact ? 'is-compact' : ''}`}>
       {list.map((p, i) => (
@@ -726,12 +748,23 @@ function Standings({ room, you, compact = false }: { room: RoomView; you: string
             </span>
             {(live || done) && (
               <span className="bar score-bar" aria-hidden>
-                <i style={{ width: `${(p.score / top) * 100}%` }} />
+                <i style={{ width: `${Math.min(100, (val(p) / top) * 100)}%` }} />
               </span>
             )}
           </span>
           <span className="item-end">
-            {live || done ? <b className="num big">{formatScore(p.score)}</b> : p.ready ? <span className="check"><Check size={14} strokeWidth={3} /></span> : null}
+            {(live || done) && friendly ? (
+              <span className="rel-score">
+                <b className="num big">{fmtPct(relativeScore(p.score, p.best))}</b>
+                <small className="num">{formatScore(p.score)}</small>
+              </span>
+            ) : live || done ? (
+              <b className="num big">{formatScore(p.score)}</b>
+            ) : p.ready ? (
+              <span className="check">
+                <Check size={14} strokeWidth={3} />
+              </span>
+            ) : null}
           </span>
         </li>
       ))}
@@ -816,6 +849,8 @@ function VersusOverlay({ room, live, me, onDismiss, onLeave }: { room: RoomView;
   const [now, setNow] = useState(Date.now());
   const sentDone = useRef(false);
   const last = useRef({ s: 0, l: 0 });
+  // My personal best before this round (friendly rooms score against it). Read once: finishing updates it.
+  const myBest = useRef(room.gameId ? bestBefore(room.gameId) : 0);
   // Tick the clock while the round is on.
   useEffect(() => {
     if (room.state !== 'countdown' && room.state !== 'playing') return;
@@ -829,13 +864,13 @@ function VersusOverlay({ room, live, me, onDismiss, onLeave }: { room: RoomView;
   const remaining = room.state === 'countdown' ? ROUND_MS : room.state === 'playing' ? Math.max(0, room.endsAt - serverNow) : 0;
   const timeUp = (room.state === 'playing' && remaining <= 0) || room.state === 'done';
   const others = room.players.filter((p) => p.pid !== me.pid);
-  const rival = room.kind === 'duel' ? others[0] : [...others].sort((a, b) => b.score - a.score)[0];
+  const rival = room.kind === 'duel' ? others[0] : [...others].sort((a, b) => rankValue(room.mode, b) - rankValue(room.mode, a))[0];
 
   // Time's up: lock in whatever this player has scored so far.
   useEffect(() => {
     if (!timeUp || sentDone.current || room.state === 'done') return;
     sentDone.current = true;
-    useMatch.getState().send({ t: 'done', s: last.current.s, l: last.current.l });
+    useMatch.getState().send({ t: 'done', s: last.current.s, l: last.current.l, b: myBest.current });
     track({ name: 'versus', action: 'finish', game_id: room.gameId ?? '' });
   }, [timeUp, room.state, room.gameId]);
 
@@ -847,17 +882,17 @@ function VersusOverlay({ room, live, me, onDismiss, onLeave }: { room: RoomView;
       ended: timeUp,
       onScore: (s, l) => {
         last.current = { s, l };
-        if (!sentDone.current) useMatch.getState().send({ t: 'score', s, l });
+        if (!sentDone.current) useMatch.getState().send({ t: 'score', s, l, b: myBest.current });
       },
       onDone: (sum: SessionSummary) => {
         if (sentDone.current) return;
         sentDone.current = true;
-        useMatch.getState().send({ t: 'done', s: sum.score, l: sum.levelReached });
+        useMatch.getState().send({ t: 'done', s: sum.score, l: sum.levelReached, b: myBest.current });
         track({ name: 'versus', action: 'finish', game_id: room.gameId ?? '' });
       },
       onLeave,
       top: <RoundClock ms={remaining} />,
-      topRight: rival ? <RivalCard p={rival} rank={room.kind === 'party' ? 'top' : undefined} /> : undefined,
+      topRight: rival ? <RivalCard p={rival} rank={room.kind === 'party' ? 'top' : undefined} friendly={room.mode === 'friendly'} /> : undefined,
       hud: room.kind === 'party' ? <PartyHud room={room} me={me.pid} /> : undefined,
       result: <RoundResult room={room} live={live} me={me} onDismiss={onDismiss} />,
     }),
@@ -880,7 +915,7 @@ function RoundClock({ ms }: { ms: number }) {
 }
 
 /** Opponent card (top right): their orb, name and a score that counts up live. */
-function RivalCard({ p, rank }: { p: PlayerView; rank?: 'top' }) {
+function RivalCard({ p, rank, friendly = false }: { p: PlayerView; rank?: 'top'; friendly?: boolean }) {
   const shown = useTween(p.score);
   const prev = useRef(p.score);
   const [bumps, setBumps] = useState<Array<{ id: number; d: number }>>([]);
@@ -898,7 +933,7 @@ function RivalCard({ p, rank }: { p: PlayerView; rank?: 'top' }) {
       <Orb size={34} skin={skinOf(p)} />
       <span className="rival-text">
         <small>{rank === 'top' ? 'Leader' : p.handle ? `@${p.handle}` : p.name}</small>
-        <b className="num">{formatScore(Math.round(shown))}</b>
+        <b className="num">{friendly && p.best !== undefined ? fmtPct(relativeScore(shown, p.best)) : formatScore(Math.round(shown))}</b>
       </span>
       {p.done && <span className="rival-done">done</span>}
       {bumps.map((b) => (
@@ -941,7 +976,7 @@ function skinOf(p: PlayerView): SkinDef {
 }
 
 function PartyHud({ room, me }: { room: RoomView; me: string }) {
-  const sorted = [...room.players].sort((a, b) => b.score - a.score);
+  const sorted = [...room.players].sort((a, b) => rankValue(room.mode, b) - rankValue(room.mode, a));
   const myIdx = sorted.findIndex((p) => p.pid === me);
   const shown = sorted.slice(0, 3);
   if (myIdx >= 3) shown.push(sorted[myIdx]);
@@ -952,7 +987,7 @@ function PartyHud({ room, me }: { room: RoomView; me: string }) {
           <li key={p.pid} className={p.pid === me ? 'is-me' : ''}>
             <span>{sorted.indexOf(p) + 1}</span>
             <span>{p.pid === me ? 'You' : p.name}</span>
-            <span>{formatScore(p.score)}</span>
+            <span>{room.mode === 'friendly' && p.best !== undefined ? fmtPct(relativeScore(p.score, p.best)) : formatScore(p.score)}</span>
           </li>
         ))}
       </ol>
@@ -998,7 +1033,7 @@ function RoundResult({ room, live, me, onDismiss }: { room: RoomView; live: Room
   const heading = room.kind === 'duel' ? (won ? 'You won' : draw ? 'Draw' : 'You lost') : me.place === 1 ? 'You won' : `You placed ${ordinal(me.place ?? 0)}`;
   return (
     <div className="glass-card">
-      <p className="eyebrow">{ghost ? 'Ghost race' : room.ranked ? 'Ranked duel' : room.kind === 'duel' ? 'Duel' : 'Party'}</p>
+      <p className="eyebrow">{ghost ? 'Ghost race' : room.ranked ? 'Ranked duel' : room.mode === 'friendly' ? (room.kind === 'duel' ? 'Friendly duel' : 'Friendly party') : room.kind === 'duel' ? 'Duel' : 'Party'}</p>
       <h2 ref={headRef} className={`result-head ${won || me.place === 1 ? 'is-win' : draw ? '' : 'is-loss'}`}>
         {heading}
       </h2>
@@ -1009,6 +1044,7 @@ function RoundResult({ room, live, me, onDismiss }: { room: RoomView; live: Room
         </p>
       )}
       <Standings room={room} you={me.pid} compact />
+      {room.mode === 'friendly' && <FriendlyBreakdown room={room} you={me.pid} />}
       <div className="results-actions">
         {room.kind === 'duel' ? (
           opponentLeft ? (
@@ -1034,6 +1070,70 @@ function RoundResult({ room, live, me, onDismiss }: { room: RoomView; live: Room
           Done
         </button>
       </div>
+    </div>
+  );
+}
+
+const fmtPct = (n: number) => `${Math.round(n)}%`;
+
+/** The personal best a friendly round compares against (relaxed timing has its own bests). */
+function bestBefore(gameId: string): number {
+  const g = useProgress.getState().get(gameId);
+  return useSettings.getState().timing !== 'standard' ? g.bestRelaxed : g.best;
+}
+
+/** Scoring for friend games: raw score, or percent of your own best. */
+function ModePicker({ mode, onChange }: { mode: ScoreMode; onChange: (m: ScoreMode) => void }) {
+  return (
+    <div className="mode-pick">
+      <div className="seg-row">
+        <span>Friend games</span>
+        <div className="seg" role="group" aria-label="Scoring for friend duels and parties">
+          <button aria-pressed={mode === 'standard'} onClick={() => onChange('standard')}>
+            Standard
+          </button>
+          <button aria-pressed={mode === 'friendly'} onClick={() => onChange('friendly')}>
+            Friendly
+          </button>
+        </div>
+      </div>
+      <p className="fine">
+        {mode === 'friendly'
+          ? 'Friendly: everyone is scored against their own best, so a newcomer can beat a veteran. Ratings don’t change.'
+          : 'Standard: highest score wins. Quick matches are always standard and ranked.'}
+      </p>
+    </div>
+  );
+}
+
+function FriendlyNote({ game }: { game: string }) {
+  return (
+    <div className="notice friendly-note">
+      <span>
+        <b>Friendly scoring.</b> Each of you is scored against your own best on {game}: beat your best and you’re over 100%. Highest percent wins. Ratings
+        don’t change.
+      </span>
+    </div>
+  );
+}
+
+/** How a friendly round was scored, one line per player. */
+function FriendlyBreakdown({ room, you }: { room: RoomView; you: string }) {
+  const list = [...room.players].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
+  return (
+    <div className="friendly-breakdown">
+      <p className="fine">Scored against each player’s own best. Ratings don’t change.</p>
+      <ul>
+        {list.map((p) => (
+          <li key={p.pid} className={p.pid === you ? 'is-me' : ''}>
+            <span>{p.pid === you ? 'You' : p.name}</span>
+            <span className="num">
+              {formatScore(p.score)} {p.best ? <>÷ best {formatScore(p.best)}</> : p.score > 0 ? <>· first time, counts as 100%</> : null}
+            </span>
+            <b className="num">{fmtPct(relativeScore(p.score, p.best))}</b>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

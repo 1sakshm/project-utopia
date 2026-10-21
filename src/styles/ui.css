@@ -1895,6 +1895,30 @@ a.item:active {
   font-family: var(--font-display);
   font-style: italic;
 }
+.recap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.recap li {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: var(--press-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  animation: settle 0.7s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 0.08s + 0.5s);
+}
+.recap li.is-good {
+  color: var(--good);
+}
 .results-actions {
   display: flex;
   flex-direction: column;

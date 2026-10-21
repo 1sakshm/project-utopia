@@ -2,7 +2,7 @@ import { Container, Graphics, Rectangle, Sprite, Text, Texture, TilingSprite } f
 import type { GameContext, GameInstance } from '@/sdk';
 import { clamp, easeInOutSine, easeOutBack, lerp, tween, TAU } from '@/sdk';
 import { createPixiApp, createParticles, glowTexture, gradientTexture, softTile, softTilePad, softTileTexture, type SoftTileOptions } from '@/sdk/pixi';
-import { describeRule, generate, type Puzzle, type Tile } from './logic';
+import { describeRule, describeTile, generate, varyingAttrs, type Attr, type Puzzle, type Tile } from './logic';
 
 const MIN_PUZZLES = 8;
 const MAX_PUZZLES = 12;
@@ -145,7 +145,9 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   ruleText.alpha = 0;
   const fx = new Container();
   const reveal = new Container();
-  app.stage.addChild(bg, vignette, lattice, motes, loom, threadFx, tray, strip, ruleText, fx, reveal);
+  /** Keyboard focus ring (arrow-key exploration of the grid and the candidate tray). */
+  const focusRing = new Graphics();
+  app.stage.addChild(bg, vignette, lattice, motes, loom, threadFx, tray, focusRing, strip, ruleText, fx, reveal);
   const particles = createParticles(ctx, fx, 260);
 
   // shuttle graphic
@@ -189,6 +191,11 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   let resolvePuzzle: (() => void) | null = null;
   let stopAmbient: (() => void) | null = null;
   const woven: Array<{ puzzle: Puzzle; cloth: number }> = [];
+  /** Attributes named in spoken tile descriptions (those that vary in the current puzzle). */
+  let vary = new Set<Attr>();
+  /** Keyboard cursor: a grid cell or a candidate in the tray. null until the first arrow press of a puzzle. */
+  let focus: { zone: 'grid'; r: number; c: number } | { zone: 'tray'; i: number } | null = null;
+  let hintGiven = false;
 
   interface Cand {
     tile: Tile;
@@ -382,6 +389,7 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     buildTray();
     buildStrip();
     ruleText.position.set(safe.x + safe.w / 2, gridGeom.y + gridGeom.size * gridGeom.n + gridGeom.gap * (gridGeom.n - 1) + 30);
+    drawFocus();
   }
 
   function gridBottom() {
@@ -639,6 +647,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
       ctx.haptics.error();
       ctx.caption('Thread snaps — try another');
       snapThread(c);
+      if (attempts >= 3) ctx.announce(`Choice ${i + 1} snaps. The loom weaves choice ${puzzle.answerIndex + 1}.`);
+      else ctx.announce(`Choice ${i + 1} snaps. Try another.`);
       if (attempts >= 3) {
         accepting = false;
         const right = cands[puzzle.answerIndex];
@@ -733,7 +743,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     const desc = p.rules.map((r) => describeRule(r, p.n)).join(' · ');
     showRule(first ? desc : `Rule: ${desc}`);
     ctx.caption(first ? `Woven! ${desc}` : `Woven. ${desc}`);
-    ctx.announce(first ? 'Correct' : 'Woven');
+    const answerText = `choice ${p.answerIndex + 1}, ${describeTile(p.answer, vary)}`;
+    ctx.announce(first ? `Correct: ${answerText}. ${desc}.` : tries > 3 ? `Woven: ${answerText}. Rule: ${desc}.` : `Woven. Rule: ${desc}.`);
     woven.push({ puzzle: p, cloth });
     hud();
     await ctx.wait(1500 * S.timingMultiplier);
@@ -787,6 +798,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     puzzle = generate(rng, stair.level);
     cloth = S.highContrast ? 0x000000 : CLOTHS[woven.length % CLOTHS.length];
     attempts = 0;
+    vary = varyingAttrs(puzzle);
+    focus = null;
     computeGeom();
     drawFrame();
     buildGrid();
@@ -812,7 +825,10 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     puzzleStart = ctx.time();
     accepting = true;
     hud();
-    ctx.announce(`Puzzle ${woven.length + 1}. ${puzzle.n} by ${puzzle.n} grid, ${puzzle.candidates.length} choices.`);
+    drawFocus();
+    const hint = hintGiven ? '' : ' Arrow keys explore tiles, Enter weaves the focused choice, number keys pick a choice, R repeats the grid, C the choices.';
+    hintGiven = true;
+    ctx.announce(`Puzzle ${woven.length + 1}. ${puzzle.n} by ${puzzle.n} grid, ${puzzle.candidates.length} choices. ${gridText()} ${choicesText()}${hint}`);
     if (preview) void ghost();
     await done;
     resolvePuzzle = null;
@@ -850,6 +866,8 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
   async function tapestryReveal() {
     accepting = false;
     puzzle = null;
+    focus = null;
+    drawFocus();
     buildGrid();
     buildTray();
     await tween(ctx, 400, (t) => {
@@ -957,8 +975,99 @@ export default async function create(ctx: GameContext): Promise<GameInstance> {
     void easeOutBack;
   }
 
+  // ---------------------------------------------------------------- screen reader + keyboard exploration
+  function cellText(r: number, c: number): string {
+    if (!puzzle) return '';
+    const [mr, mc] = puzzle.missing;
+    return r === mr && c === mc && slotView?.visible !== false ? 'missing' : describeTile(puzzle.grid[r][c], vary);
+  }
+
+  function gridText(): string {
+    if (!puzzle) return '';
+    const rows: string[] = [];
+    for (let r = 0; r < puzzle.n; r++) rows.push(`Row ${r + 1}: ${Array.from({ length: puzzle.n }, (_, c) => cellText(r, c)).join('; ')}.`);
+    return rows.join(' ');
+  }
+
+  function candText(i: number): string {
+    const c = cands[i];
+    if (!c) return '';
+    return `Choice ${i + 1}${c.state === 'wrong' ? ', snapped' : c.state === 'used' ? ', woven' : ''}: ${describeTile(c.tile, vary)}`;
+  }
+
+  function choicesText(): string {
+    return `Choices: ${cands.map((_, i) => candText(i).replace(/^Choice /, '')).join('; ')}.`;
+  }
+
+  function drawFocus() {
+    focusRing.clear();
+    for (const c of cands) if (c.hover && focus) c.hover = 0;
+    if (!puzzle || !focus) return;
+    const hc = S.highContrast;
+    let x: number;
+    let y: number;
+    let size: number;
+    if (focus.zone === 'grid') {
+      ({ x, y } = cellPos(focus.r, focus.c));
+      size = gridGeom.size;
+    } else {
+      const c = cands[focus.i];
+      if (!c) return;
+      c.hover = 1;
+      x = c.hx;
+      y = c.hy;
+      size = c.size;
+    }
+    const h = size / 2 + 5;
+    focusRing.roundRect(x - h, y - h, h * 2, h * 2, size * 0.1).stroke({ width: 3, color: hc ? 0xffffff : 0xfff1d6, alpha: 0.95 });
+  }
+
+  function moveFocus(dx: number, dy: number) {
+    if (!puzzle) return;
+    const n = puzzle.n;
+    const k = cands.length;
+    const perRow = trayLayout(k).perRow;
+    if (!focus) focus = { zone: 'grid', r: 0, c: 0 };
+    else if (focus.zone === 'grid') {
+      const r = focus.r + dy;
+      const c = clamp(focus.c + dx, 0, n - 1);
+      if (r >= n) focus = { zone: 'tray', i: Math.min(c, Math.min(perRow, k) - 1) };
+      else focus = { zone: 'grid', r: Math.max(0, r), c };
+    } else {
+      const i = focus.i;
+      if (dy < 0 && i < perRow) focus = { zone: 'grid', r: n - 1, c: Math.min(i % perRow, n - 1) };
+      else if (dy !== 0) focus = { zone: 'tray', i: clamp(i + dy * perRow, 0, k - 1) };
+      else focus = { zone: 'tray', i: clamp(i + dx, 0, k - 1) };
+    }
+    drawFocus();
+    announceFocus();
+  }
+
+  function announceFocus() {
+    if (!puzzle || !focus) return;
+    if (focus.zone === 'grid') ctx.announce(`Row ${focus.r + 1}, column ${focus.c + 1}: ${cellText(focus.r, focus.c)}`);
+    else ctx.announce(candText(focus.i));
+  }
+
+  function activate() {
+    if (!puzzle) return;
+    if (focus?.zone === 'tray' && cands[focus.i]?.state === 'idle') choose(focus.i);
+    else if (focus) announceFocus();
+    else moveFocus(0, 0);
+  }
+
   const pick = (i: number) => () => choose(i);
-  const keyMap: Record<string, () => void> = {};
+  const keyMap: Record<string, () => void> = {
+    ArrowLeft: () => moveFocus(-1, 0),
+    ArrowRight: () => moveFocus(1, 0),
+    ArrowUp: () => moveFocus(0, -1),
+    ArrowDown: () => moveFocus(0, 1),
+    Enter: activate,
+    NumpadEnter: activate,
+    Space: activate,
+    KeyR: () => puzzle && ctx.announce(gridText()),
+    KeyC: () => puzzle && ctx.announce(choicesText()),
+  };
   for (let i = 0; i < 6; i++) {
     keyMap[`Digit${i + 1}`] = pick(i);
     keyMap[`Numpad${i + 1}`] = pick(i);

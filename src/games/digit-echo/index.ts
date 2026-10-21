@@ -25,9 +25,10 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
       notes: [
+        'Playable by sound alone: digits are spoken, backwards rounds are spoken, and your turn, results and lives left are announced',
         'With captions on, each digit also appears in its lantern while it is spoken',
         'Answer by speaking or by typing',
         'No time limit when answering',

@@ -14,6 +14,7 @@ export default defineGame({
       keyboard: [
         ['1–5', 'Pick a shell (left to right)'],
         ['R', 'Replay the word'],
+        ['T', 'Hear the shells that are left, with their numbers'],
       ],
     },
     abilities: { primary: 'phonological-awareness', secondary: ['reading-fluency', 'working-memory'] },
@@ -25,10 +26,12 @@ export default defineGame({
       relaxedTiming: true,
       noTimePressure: true,
       visualOnlyPlayable: true,
-      audioOnlyPlayable: false,
+      audioOnlyPlayable: true,
       oneHanded: true,
       notes: [
         'Words are spoken and also shown as text on every shell',
+        'Playable by sound alone: the task and numbered shells are announced, T speaks the remaining shells, and every pick, hint and pearl is announced',
+        'Syllable shells are read by the device voice, which can sound slightly off for word fragments',
         'Playable with sound off by reading (rhyme by spelling is imperfect)',
         'Respects the reading-font and text-size settings',
         'Untimed: shells wait for you; replay the voice as often as you like',

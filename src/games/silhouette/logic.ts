@@ -264,3 +264,22 @@ export function makeChoicePuzzle(rng: Rng, def: LevelDef): ChoicePuzzle {
   }
   throw new Error('choice generation failed');
 }
+
+/**
+ * Screen-reader text for a shadow / outline on the wall, top row first, left to right (wall y points up),
+ * e.g. "3 wide, 2 tall. Top row: filled, empty, empty. Row 2: filled, filled, filled".
+ * Equal shadows always give equal text.
+ */
+export function describeCells(cells: Array<[number, number]>): string {
+  if (!cells.length) return 'empty';
+  const w = Math.max(...cells.map((c) => c[0])) + 1;
+  const h = Math.max(...cells.map((c) => c[1])) + 1;
+  const has = new Set(cells.map((c) => c.join(',')));
+  const rows: string[] = [];
+  for (let y = h - 1; y >= 0; y--) {
+    const row: string[] = [];
+    for (let x = 0; x < w; x++) row.push(has.has(`${x},${y}`) ? 'filled' : 'empty');
+    rows.push(`${y === h - 1 ? 'Top row' : `Row ${h - y}`}: ${row.join(', ')}`);
+  }
+  return `${w} wide, ${h} tall. ${rows.join('. ')}`;
+}

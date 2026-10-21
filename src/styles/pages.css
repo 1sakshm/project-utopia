@@ -814,3 +814,117 @@
   gap: 12px;
   margin-top: 36px;
 }
+
+/* ---------- growth, starter check, weekly families ---------- */
+.growth-gain.is-up {
+  color: var(--good);
+}
+.growth-gain.is-down {
+  color: var(--bad);
+}
+.growth-gain.is-dim {
+  color: var(--text-3, var(--text-2));
+}
+.growth-spark {
+  display: inline-flex;
+  opacity: 0.9;
+}
+.growth-list .ab-dot {
+  align-self: center;
+}
+.starter-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.starter-card h3 {
+  margin: 0;
+}
+.starter-card .muted {
+  margin: 0;
+  font-size: 0.86rem;
+}
+.starter-card .results-trio-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+.starter-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.week-fams {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+.week-fams-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.week-fams-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--press-sm);
+  transition: background 0.4s var(--ease);
+}
+.week-fams-dots i.on {
+  background: var(--c);
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+/* Orb level-up label (Home) */
+.hero2-orb {
+  position: relative;
+}
+.orb-levelup {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  z-index: 2;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: var(--press-sm), 0 0 0 1px var(--line);
+  color: var(--accent-text);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  animation: orbLevelUp 3.7s var(--ease) both;
+}
+@keyframes orbLevelUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.9);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-levelup {
+    animation: none;
+  }
+}
+
+/* Streak chip: a small sage dot while this week's rest day is still unused */
+.streak-chip .rest-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--sage, var(--good));
+}

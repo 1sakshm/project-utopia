@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME_BY_ID } from '@/games/registry';
 import { ABILITY_RING } from './abilities';
 import { emptyProgress } from './progress';
-import { computeStreak, nextUp, shareText, starsFor, todayTrio, trioStatus } from './retention';
+import { computeStreak, nextUp, shareText, starsFor, todayTrio, trioStatus, weekFamilies, weekOf } from './retention';
 
 const ringOf = (id: string) => ABILITY_RING[GAME_BY_ID[id].manifest.abilities.primary];
 
@@ -74,5 +74,36 @@ describe('streak', () => {
   });
   it('is zero with no play', () => {
     expect(computeStreak([], now).days).toBe(0);
+  });
+});
+
+describe("today's 3, weekly rotation", () => {
+  const days = (monday: string) => Array.from({ length: 7 }, (_, i) => new Date(Date.parse(monday) + i * 864e5).toISOString().slice(0, 10));
+
+  it('covers every scored family at least twice a week, with no family repeated on a day', () => {
+    for (const monday of ['2026-10-26', '2026-11-02', '2027-03-01', '2027-06-14']) {
+      const trios = days(monday).map((d) => todayTrio(d));
+      const counts = new Map<string, number>();
+      for (const t of trios) {
+        expect(new Set(t.map(ringOf)).size).toBe(3);
+        for (const id of t) {
+          expect(GAME_BY_ID[id].manifest.showScore).not.toBe(false);
+          counts.set(ringOf(id), (counts.get(ringOf(id)) ?? 0) + 1);
+        }
+      }
+      expect(counts.size).toBe(7);
+      for (const c of counts.values()) expect(c).toBeGreaterThanOrEqual(2);
+      expect(weekOf(days(monday)[6])).toBe(monday);
+    }
+  });
+
+  it('leaves days before the switch unchanged and counts families played this week', () => {
+    expect(todayTrio('2026-10-21')).toEqual(todayTrio('2026-10-21'));
+    const [a, b] = todayTrio('2026-10-27');
+    const h = [a, b].map((gameId) => ({ gameId, t: Date.parse('2026-10-27T10:00:00Z') }));
+    const old = { gameId: a, t: Date.parse('2026-10-20T10:00:00Z') };
+    const wf = weekFamilies([...h, old], '2026-10-28');
+    expect(wf.played).toHaveLength(2);
+    expect(wf.all).toHaveLength(7);
   });
 });

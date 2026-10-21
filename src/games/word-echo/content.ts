@@ -13,3 +13,9 @@ export const WORDS: Record<VoiceLang, string[]> = {
     'बटन', 'सीढ़ी', 'टोकरी', 'कछुआ', 'पेंसिल', 'रॉकेट', 'टापू', 'वायलिन', 'मोर', 'नींबू', 'पुल', 'सीप', 'शहद',
   ],
 };
+
+/** Short spoken cue before a backwards round (so it is not only shown by the ↺ icon). */
+export const BACKWARDS_CUE: Record<VoiceLang, string> = {
+  'en-IN': 'Backwards!',
+  'hi-IN': 'उल्टा!',
+};
